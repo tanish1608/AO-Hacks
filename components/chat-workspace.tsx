@@ -746,7 +746,7 @@ export default function ChatWorkspace() {
             disabled={busy}
           >
             <Plus size={16} />
-            New task<span>+</span>
+            New task
           </TaskActionButton>
         </SidebarHeader>
         <SidebarContent>

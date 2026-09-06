@@ -1,0 +1,148 @@
+{
+  "scope": "Synthetic finance fixtures; real Gemini runs; tool-free; local only. Reviews are model-based comparisons to hand-calculated expected facts, not production accuracy.",
+  "results": [
+    {
+      "fixture": "invoice-drafts",
+      "expected": "Three eligible invoice drafts: C1 USD net 1100, tax 88, total 1188; C1 EUR total 600; C3 USD net 200, tax 10, total 210. Hold C2 USD 750 because billing address is missing. Deduplicate L2 exactly once. Eligible USD total 1398 and EUR total 600; never sum currencies.",
+      "metrics": {
+        "runId": "02cdf0ae-b8ae-4975-ba72-b8b652360991",
+        "chatId": "eb8c0129-bcfb-4579-b151-6f3c0e8fa848",
+        "experimentId": null,
+        "arm": null,
+        "useMemory": true,
+        "status": "completed",
+        "attempts": 2,
+        "passed": true,
+        "score": 1,
+        "inputTokens": 36253,
+        "outputTokens": 9386,
+        "costUsd": 0.06238725,
+        "durationMs": 41162.462958,
+        "toolCalls": 0,
+        "toolErrors": 0,
+        "searchCalls": 0,
+        "searchCached": 0,
+        "graphDigest": "28b76fbca254c6b97b5fcdf43677582c1f24aa71350c5f88c9b78f3ff21be952",
+        "createdAt": "2026-09-06T17:34:28.467Z"
+      },
+      "review": {
+        "passed": false,
+        "findings": [
+          "The output does not explicitly state the aggregate eligible totals: USD total 1398 and EUR total 600.",
+          "The output does not mention the amount ($750) associated with the held order for Customer C2."
+        ]
+      },
+      "reviewUsage": {
+        "inputTokens": 1229,
+        "outputTokens": 479,
+        "costUsd": 0.002718,
+        "model": "gemini-3.8-flash"
+      }
+    },
+    {
+      "fixture": "cash-forecast",
+      "expected": "Base closing cash weeks 1\u20134: 3500,3000,2000,2500. Downside closing: 3500,1000,0,2500. First buffer breach week 2; maximum funding need versus 2000 buffer is 2000 in week 3. Base never falls below buffer (equals in week 3). Total receipts 9000, payments 11500, ending cash 2500 in both scenarios. Downside week-4 receipts 5000.",
+      "metrics": {
+        "runId": "6b349bab-9b32-4d46-9f9c-26e45e3852bc",
+        "chatId": "337cc353-7662-456e-b78c-de2df1623479",
+        "experimentId": null,
+        "arm": null,
+        "useMemory": true,
+        "status": "completed",
+        "attempts": 1,
+        "passed": true,
+        "score": 1,
+        "inputTokens": 18318,
+        "outputTokens": 6035,
+        "costUsd": 0.03636975,
+        "durationMs": 19409.321668000004,
+        "toolCalls": 0,
+        "toolErrors": 0,
+        "searchCalls": 0,
+        "searchCached": 0,
+        "graphDigest": "31f74b50a5ba9c9e5c46df7a47d8b4f5e590014519d66065e22d7ddbb53a8d92",
+        "createdAt": "2026-09-06T17:36:07.663Z"
+      },
+      "review": {
+        "passed": true,
+        "findings": []
+      },
+      "reviewUsage": {
+        "inputTokens": 1630,
+        "outputTokens": 16,
+        "costUsd": 0.0012825,
+        "model": "gemini-3.8-flash"
+      }
+    },
+    {
+      "fixture": "bank-reconciliation",
+      "expected": "Raw bank movement 795. Raw ledger movement 280. Remove duplicate J3 to get ledger 780. Add back uncleared CHECK-OPEN 120, subtract fee 30, subtract unexplained bank debit 75: 780+120-30-75=795. B1 matches J1+J2 less fee. UNKNOWN requires investigation, not invented classification. J5 is timing, not an error.",
+      "metrics": {
+        "runId": "fa49402f-1694-4490-9205-7bc33d535bc5",
+        "chatId": "d6fb2a36-049b-4d84-a585-1983bed4f5fa",
+        "experimentId": null,
+        "arm": null,
+        "useMemory": true,
+        "status": "completed",
+        "attempts": 1,
+        "passed": true,
+        "score": 1,
+        "inputTokens": 14171,
+        "outputTokens": 4579,
+        "costUsd": 0.027799500000000005,
+        "durationMs": 16183.893041000003,
+        "toolCalls": 0,
+        "toolErrors": 0,
+        "searchCalls": 0,
+        "searchCached": 0,
+        "graphDigest": "21a2747cdaf71d41016d4cabbe8c572e1113cec4d8beb4dd2cec5a2942a89cff",
+        "createdAt": "2026-09-06T17:35:27.553Z"
+      },
+      "review": {
+        "passed": true,
+        "findings": []
+      },
+      "reviewUsage": {
+        "inputTokens": 1875,
+        "outputTokens": 16,
+        "costUsd": 0.00146625,
+        "model": "gemini-3.8-flash"
+      }
+    },
+    {
+      "fixture": "invoice-drafts",
+      "expected": "Three eligible invoice drafts: C1 USD net 1100, tax 88, total 1188; C1 EUR total 600; C3 USD net 200, tax 10, total 210. Hold C2 USD 750 because billing address is missing. Deduplicate L2 exactly once. Eligible USD total 1398 and EUR total 600; never sum currencies.",
+      "metrics": {
+        "runId": "cc65caa2-cacd-4785-98c7-4bd721b51d91",
+        "chatId": "eb8c0129-bcfb-4579-b151-6f3c0e8fa848",
+        "experimentId": null,
+        "arm": null,
+        "useMemory": true,
+        "status": "completed",
+        "attempts": 1,
+        "passed": true,
+        "score": 1,
+        "inputTokens": 24314,
+        "outputTokens": 5874,
+        "costUsd": 0.040263,
+        "durationMs": 21337.616291,
+        "toolCalls": 0,
+        "toolErrors": 0,
+        "searchCalls": 0,
+        "searchCached": 0,
+        "graphDigest": "af0358ab4995df35661c08866480df53b174688bc9556dc0946fb6eae49d3bb4",
+        "createdAt": "2026-09-06T17:37:59.283Z"
+      },
+      "review": {
+        "passed": true,
+        "findings": []
+      },
+      "reviewUsage": {
+        "inputTokens": 1625,
+        "outputTokens": 16,
+        "costUsd": 0.00127875,
+        "model": "gemini-3.8-flash"
+      }
+    }
+  ]
+}

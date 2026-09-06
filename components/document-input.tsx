@@ -11,6 +11,10 @@ import {
 
 async function extract(file: File): Promise<string> {
   const kind = validateDocument(file.name, file.size);
+  if (kind === 'xlsx') {
+    const { extractWorkbook } = await import('@/lib/workbench/xlsx-input');
+    return extractWorkbook(new Uint8Array(await file.arrayBuffer()));
+  }
   if (kind === 'pdf') {
     const pdfjs = await import('pdfjs-dist');
     pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -158,7 +162,7 @@ export default function DocumentInput({
         {loading ? 'Reading document…' : 'Attach documents'}
       </Button>
       <p className="quiet-text">
-        PDF, DOCX, TXT, MD, CSV, JSON · 10 MB each. Review extracted text before
+        Excel (.xlsx), PDF, DOCX, TXT, MD, CSV, JSON · 10 MB each. Review extracted text before
         running; images and document formatting are not included.
       </p>
       {error && (

@@ -1,5 +1,14 @@
 import { digest } from '../engine/runtime.ts';
-import type { Chat, Experiment, ExperimentArm, Run } from './types.ts';
+import type { Chat, Experiment, ExperimentArm, Run, Knowledge } from './types.ts';
+/** Hold tool knowledge constant in both arms to isolate the task-memory effect. */
+export function frozenKnowledge(experiment?: Experiment): Knowledge {
+  const records = structuredClone(experiment?.toolKnowledgeSnapshot ?? []);
+  return {
+    lookup: async (toolkits, slugs) => structuredClone(records.filter((r) =>
+      toolkits.includes(r.toolkit) && (!slugs || !r.slug || slugs.includes(r.slug)))),
+    record: async () => {},
+  };
+}
 export const MAX_PAIRS = 3;
 const PER_ARM_TOKENS = 120000;
 const DEFAULT_MAX_COST_USD = 0.5;
@@ -33,7 +42,7 @@ export async function planExperiment(
     versionId,
     input,
     memorySnapshot,
-    memoryDigest: await digest(memorySnapshot.map((m) => m.id).sort()),
+    memoryDigest: await digest(memorySnapshot),
     pairs,
     arms,
     budget: {
@@ -68,7 +77,7 @@ export function applyArmResult(
 ): Experiment {
   const next = structuredClone(experiment);
   const arm = next.arms.find((a) => a.runId === run.id);
-  if (!arm) return next;
+  if (!arm || arm.status === 'done' || arm.status === 'failed') return next;
   arm.status = run.status === 'failed' ? 'failed' : 'done';
   next.spent.runs++;
   next.spent.inputTokens += run.usage.inputTokens;

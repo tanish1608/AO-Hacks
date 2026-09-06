@@ -2,6 +2,16 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
+.finance-demo-gallery { width: min(100%, 760px); margin: 24px auto; text-align: left; }
+.finance-demo-gallery h2 { font-size: 15px; font-weight: 600; }
+.finance-demo-gallery > p { color: #64748b; font-size: 13px; margin: 6px 0 12px; }
+.finance-demo-gallery > div { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid #e5e7eb; flex-wrap:wrap; }
+.finance-demo-gallery a, .demo-input-actions a { font-size:12px; text-decoration:underline; text-underline-offset:3px; }
+.demo-input-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:12px 0; }
+.connection-prompt { border:1px solid #dbe2ec; padding:16px; border-radius:12px; background:#f8fafc; }
+.connection-prompt h3 { font-weight:600; }
+.connection-prompt button { margin:6px 6px 6px 0; }
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -4300,6 +4310,8 @@ h3 {
 .trend-chart figcaption{display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 6px;font-size:10px;color:#98a2b2}
 .trend-chart figcaption strong{font-size:15px;font-weight:450;color:#43516a}
 .trend-chart svg{display:block;width:100%;height:auto}
+/* Reserve the scrollbar so an auto-height chart cannot oscillate width against it. */
+.detail-tab{scrollbar-gutter:stable}
 .trend-line{fill:none;stroke:#2d3f79;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
 .trend-target{stroke:#c3ccdb;stroke-width:1;stroke-dasharray:3 3}
 .trend-dot.with-memory{fill:#2d3f79;stroke:none}

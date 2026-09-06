@@ -16,7 +16,7 @@ export async function listRunMetrics(
 ): Promise<RunMetric[]> {
   const rows = await database()
     .prepare(
-      'SELECT run_id,chat_id,experiment_id,arm,use_memory,status,attempts,passed,score,input_tokens,output_tokens,cost_usd,duration_ms,tool_calls,tool_errors,search_calls,search_cached,graph_digest,created_at FROM agent_run_metrics WHERE chat_id=? AND owner_id=? ORDER BY created_at ASC LIMIT ?',
+      "SELECT run_id,chat_id,experiment_id,arm,use_memory,status,attempts,passed,score,input_tokens,output_tokens,cost_usd,duration_ms,tool_calls,tool_errors,search_calls,search_cached,graph_digest,created_at FROM agent_run_metrics AS m WHERE chat_id=? AND owner_id=? AND NOT EXISTS (SELECT 1 FROM agent_runs AS r WHERE r.id=m.run_id AND r.owner_id=m.owner_id AND json_extract(r.payload,'$.mode')='manual') ORDER BY created_at ASC LIMIT ?",
     )
     .bind(chatId, owner, limit)
     .all<Record<string, string | number | null>>();
@@ -164,7 +164,7 @@ export async function saveChat(
         ),
     );
   // Derived chat/run state, so it belongs in the same guarded batch as the run.
-  if (run && TERMINAL.includes(run.status)) {
+  if (run && run.mode !== 'manual' && TERMINAL.includes(run.status)) {
     const m = runMetrics(run);
     queries.push(
       database()

@@ -909,7 +909,7 @@ export function announceTest(chat: Chat, run: Run) {
     chat,
     run,
     'run_started',
-    `I’ll create a sample input, execute the workflow, and check its output. Failed checks trigger targeted improvements, up to ${run.maxIterations} attempts.`,
+    `I’ll ${run.input?.trim() ? 'use the supplied input' : 'create a sample input'}, execute the workflow, and check its output. Failed checks trigger targeted improvements, up to ${run.maxIterations} attempts.`,
   );
 }
 const State = Annotation.Root({ chat: Annotation<Chat>, run: Annotation<Run> });

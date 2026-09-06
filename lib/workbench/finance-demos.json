@@ -1,0 +1,50 @@
+[
+  {
+    "id": "invoice-drafts",
+    "title": "Orders to invoice drafts",
+    "prompt": "Build a document-only workflow that converts uploaded Excel order and customer tables into draft invoices. Use no external apps. Deduplicate exact order-line IDs, group by customer AND currency, hold customers with missing billing addresses, apply the supplied line tax rate after line discount, and show every line, subtotal, tax, total, and an exception register. Do not post or email invoices. Treat duplicate line IDs with conflicting values as exceptions. Use deterministic numeric assertions in the generated test wherever possible.",
+    "expected": "Three eligible invoice drafts: C1 USD net 1100, tax 88, total 1188; C1 EUR total 600; C3 USD net 200, tax 10, total 210. Hold C2 USD 750 because billing address is missing. Deduplicate L2 exactly once. Eligible USD total 1398 and EUR total 600; never sum currencies.",
+    "assertions": [
+      "1188",
+      "1398",
+      "600",
+      "210",
+      "750",
+      "L2",
+      "C2"
+    ],
+    "input": "[Sheet: Orders]\nOrders\t\t\t\t\t\t\t\t\t\t\nSynthetic demo data. USD unless the currency column states otherwise.\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\nLine ID\tCustomer ID\tCurrency\tDescription\tQuantity\tUnit price\tDiscount\tTax rate\tNet\tTax\tTotal\nL1\tC1\tUSD\tDesign hours\t10\t100\t0.1\t0.08\t900\t72\t972\nL2\tC1\tUSD\tHosting\t1\t200\t0\t0.08\t200\t16\t216\nL2\tC1\tUSD\tHosting\t1\t200\t0\t0.08\t200\t16\t216\nL3\tC2\tUSD\tAudit hours\t5\t150\t0\t0\t750\t0\t750\nL4\tC1\tEUR\tTranslation\t2\t300\t0\t0\t600\t0\t600\nL5\tC3\tUSD\tSupport\t4\t50\t0\t0.05\t200\t10\t210\n\n[Sheet: Customers]\nCustomers\t\t\t\nSynthetic demo data. USD unless the currency column states otherwise.\t\t\t\n\t\t\t\nCustomer ID\tName\tBilling address\tTerms\nC1\tNorthstar Studio\t10 Example Way, Demo City\tNet 30\nC2\tCedar Labs\t\tNet 15\nC3\tAtlas Retail\t20 Sample Road, Demo City\tNet 30"
+  },
+  {
+    "id": "bank-reconciliation",
+    "title": "Reconcile deposits, fees and timing",
+    "prompt": "Build a document-only workflow for an uploaded Excel bank/ledger reconciliation in USD. Use no external apps. Match by reference and amount; match processor batches many-to-one using gross receipts less documented fees. Flag exact duplicate ledger IDs, keep uncleared ledger items as timing differences and unexplained bank items as exceptions. Provide a reconciled cash bridge, proposed fee/unknown-item entries for review, and source-row evidence. Do not book entries or send messages. Generated tests should verify numeric reconciliation.",
+    "expected": "Raw bank movement 795. Raw ledger movement 280. Remove duplicate J3 to get ledger 780. Add back uncleared CHECK-OPEN 120, subtract fee 30, subtract unexplained bank debit 75: 780+120-30-75=795. B1 matches J1+J2 less fee. UNKNOWN requires investigation, not invented classification. J5 is timing, not an error.",
+    "assertions": [
+      "795",
+      "780",
+      "120",
+      "30",
+      "75",
+      "J3",
+      "BATCH-A"
+    ],
+    "input": "[Sheet: Bank]\nBank\t\t\t\nSynthetic demo data. USD unless the currency column states otherwise.\t\t\t\n\t\t\t\nBank ID\tReference\tAmount USD\tContext\nB1\tBATCH-A\t970\tGross 1000 less processor fee 30\nB2\tRENT\t-500\tRent\nB3\tCLIENT-X\t400\tInvoice receipt\nB4\tUNKNOWN\t-75\tNo explanation supplied\n\n[Sheet: Ledger]\nLedger\t\t\t\nSynthetic demo data. USD unless the currency column states otherwise.\t\t\t\n\t\t\t\nLedger ID\tReference\tAmount USD\tContext\nJ1\tBATCH-A\t600\tCustomer receipt one\nJ2\tBATCH-A\t400\tCustomer receipt two\nJ3\tRENT\t-500\tRent\nJ3\tRENT\t-500\tRent\nJ4\tCLIENT-X\t400\tCustomer receipt\nJ5\tCHECK-OPEN\t-120\tIssued check, not yet cleared"
+  },
+  {
+    "id": "cash-forecast",
+    "title": "Cash runway with delayed collections",
+    "prompt": "Build a document-only workflow that reads an uploaded Excel four-week cash plan and produces base and downside cash forecasts in USD. Use no external apps. Opening cash is 5000 and the minimum operating buffer is 2000. Base case collects the stated receivables in their scheduled weeks. Downside collects only 50% of the week-2 receivable in week 2 and moves the remainder to week 4; other receipts and payments stay unchanged. Show opening cash, receipts, payments, closing cash and buffer deficit for every week in both cases. Identify the first shortfall and peak financing need, and propose options for human review without executing anything. Tests should assert numeric balances and cash conservation.",
+    "expected": "Base closing cash weeks 1–4: 3500,3000,2000,2500. Downside closing: 3500,1000,0,2500. First buffer breach week 2; maximum funding need versus 2000 buffer is 2000 in week 3. Base never falls below buffer (equals in week 3). Total receipts 9000, payments 11500, ending cash 2500 in both scenarios. Downside week-4 receipts 5000.",
+    "assertions": [
+      "3500",
+      "3000",
+      "2000",
+      "2500",
+      "1000",
+      "9000",
+      "11500"
+    ],
+    "input": "[Sheet: Cash plan]\nCash plan\t\t\t\t\nSynthetic demo data. USD unless the currency column states otherwise.\t\t\t\t\n\t\t\t\t\nWeek\tReceipts USD\tPayments USD\tBase opening\tBase closing\n1\t1000\t2500\t5000\t3500\n2\t4000\t4500\t3500\t3000\n3\t1000\t2000\t3000\t2000\n4\t3000\t2500\t2000\t2500\n\t\t\t\t\n\t\t\t\t\nOpening cash USD\t5000\t\t\t\nOperating buffer USD\t2000\t\t\t\nWeek 2 collection rate\t0.5\t\t\t\n\t\t\t\t\nDownside: defer half of week 2 receipts to week 4. Other cash flows unchanged.\t\t\t\t"
+  }
+]

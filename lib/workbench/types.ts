@@ -298,6 +298,7 @@ export interface Experiment {
   versionId: string;
   input: string;
   memorySnapshot: Memory[];
+  toolKnowledgeSnapshot?: ToolKnowledgeRecord[];
   memoryDigest: string;
   pairs: number;
   arms: ExperimentArm[];

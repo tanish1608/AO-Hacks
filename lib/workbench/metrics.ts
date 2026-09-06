@@ -19,7 +19,7 @@ export function runMetrics(run: Run): RunMetric {
     useMemory: run.useMemory,
     status: run.status,
     attempts: run.attempts.length,
-    passed: run.status === 'completed',
+    passed: run.mode !== 'manual' && run.status === 'completed' && Boolean(last?.evaluation),
     score: last?.evaluation?.score ?? null,
     inputTokens: run.usage.inputTokens,
     outputTokens: run.usage.outputTokens,
@@ -119,7 +119,7 @@ export function ablation(
   experimentId: string,
 ): AblationResult {
   const rows = metrics.filter(
-    (m) => m.experimentId === experimentId && m.status !== 'running',
+    (m) => m.experimentId === experimentId && ['completed', 'exhausted', 'blocked', 'failed'].includes(m.status),
   );
   const memory = rows.filter((r) => r.useMemory),
     control = rows.filter((r) => !r.useMemory);

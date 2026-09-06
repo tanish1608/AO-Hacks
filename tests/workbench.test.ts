@@ -1,7 +1,45 @@
 import { retainMessages } from '../lib/workbench/messages.ts';
+import { frozenKnowledge } from '../lib/workbench/experiment.ts';
 import { validateAppSelection } from '../lib/workbench/apps.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+
+void test('A/B digests include memory content and results cannot be counted twice', async () => {
+  const chat = await setup();
+  chat.memory = [{ id:'same-id', kind:'strategy',content:'Use source evidence',status:'supported',evidence:[],createdAt:'now',updatedAt:'now',sourceRun:'prior',supportedRuns:[],usedCount:0 }];
+  const first = await planExperiment(chat, 'input', 1, 'v1', 'now');
+  chat.memory[0].content = 'Changed behavior';
+  const second = await planExperiment(chat, 'input', 1, 'v1', 'now');
+  assert.notEqual(first.memoryDigest, second.memoryDigest);
+  const run = await startRun(chat);
+  run.status = 'completed';
+  const once = applyArmResult(startArm(first, first.arms[0], run.id), run);
+  assert.equal(applyArmResult(once, run).spent.runs, 1);
+});
+
+void test('A/B tool knowledge cannot change between requests or leak lookup mutations', async () => {
+  const chat = await setup();
+  const experiment = await planExperiment(chat, 'input', 1, 'v1', 'now');
+  experiment.toolKnowledgeSnapshot = [{toolkit:'github',slug:'LIST',claim:'original'} as import('../lib/workbench/types.ts').ToolKnowledgeRecord];
+  const frozen = frozenKnowledge(experiment);
+  experiment.toolKnowledgeSnapshot[0].claim = 'changed';
+  const result = await frozen.lookup(['github'], ['LIST']);
+  assert.equal(result[0].claim, 'original');
+  result[0].claim = 'mutated';
+  assert.equal((await frozen.lookup(['github']))[0].claim, 'original');
+  assert.equal((await frozen.lookup(['gmail'])).length, 0);
+  await frozen.record([]);
+  assert.deepEqual(await frozenKnowledge().lookup(['github']), []);
+});
+
+void test('manual completion is not a passed evaluation and paused arms are not measurements', async () => {
+  const chat = await setup();
+  const manual = await startRun(chat, true, undefined, {mode:'manual',input:'document'});
+  manual.status = 'completed';
+  assert.equal(runMetrics(manual).passed, false);
+  const metrics = [true,false].flatMap(useMemory => Array.from({length:3}, (_,i) => ({...runMetrics(manual),runId:`${useMemory}-${i}`,experimentId:'pending',useMemory,status:'paused' as const})));
+  assert.equal(ablation(metrics,'pending').nPerArm,0);
+});
 import {
   createChat,
   design,

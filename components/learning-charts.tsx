@@ -33,7 +33,8 @@ export function TrendLine({
   label: string;
   format: (v: number) => string;
 }) {
-  const values = points.map((p) => accessor(p) ?? 0);
+  const measured = points.filter((p) => accessor(p) !== null);
+  const values = measured.map((p) => accessor(p)!);
   const last = values.at(-1);
   const targetY =
     target === undefined
@@ -57,7 +58,7 @@ export function TrendLine({
           />
         )}
         {values.length > 1 && <path d={path(values, max)} className="trend-line" />}
-        {points.map((p, i) => {
+        {measured.map((p, i) => {
           const x =
             values.length > 1
               ? PAD + (i * (W - PAD * 2)) / (values.length - 1)

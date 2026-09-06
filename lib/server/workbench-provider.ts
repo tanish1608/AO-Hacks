@@ -6,7 +6,8 @@ import type { Chat, Dependencies, Run } from '../workbench/types';
 import { digest } from '../engine/runtime';
 import { database } from './store';
 import { HttpError } from './security';
-import { knowledgeStore, readOnlyKnowledge } from './tool-knowledge-store';
+import { knowledgeStore } from './tool-knowledge-store';
+import { frozenKnowledge } from '../workbench/experiment';
 import {
   applyLiveness,
   liveToolkits,
@@ -74,15 +75,17 @@ export async function dependencies(
       search: async (query, allowed) => {
         // Schemas are stable enough to reuse; authorization is not, so a hit
         // still re-checks liveness and falls through when that is uncertain.
-        const cached = await readSchemaCache(owner, query, allowed).catch(
+        const cached = run?.experimentId ? null : await readSchemaCache(owner, query, allowed).catch(
           () => null,
         );
         if (cached) {
           const live = await liveToolkits(g, session);
-          if (live) return applyLiveness(cached, live);
+          if (live && cached.every((t) => live.has(t.toolkit.toLowerCase())))
+            return applyLiveness(cached, live);
         }
         const fresh = await g.search(session, query, allowed);
-        await writeSchemaCache(owner, query, allowed, fresh).catch(() => {});
+        if (!run?.experimentId)
+          await writeSchemaCache(owner, query, allowed, fresh).catch(() => {});
         return fresh.map((t) => ({ ...t, source: 'live' as const }));
       },
       execute: async (slug, args) => {
@@ -151,7 +154,7 @@ export async function dependencies(
     // An ablation arm may read what earlier runs learned but must not add to it,
     // or the second arm would learn from the first and confound the comparison.
     knowledge: run?.experimentId
-      ? readOnlyKnowledge(owner)
+      ? frozenKnowledge(chat.experiment?.id === run.experimentId ? chat.experiment : undefined)
       : knowledgeStore(owner),
     model: geminiModel({
       key: e.GEMINI_API_KEY,

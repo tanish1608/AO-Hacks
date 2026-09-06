@@ -35,9 +35,10 @@ import {
   planExperiment,
   startArm,
 } from '@/lib/workbench/experiment';
-import { validateWorkflow } from '@/lib/workbench/validation';
+import { validateWorkflow, retrieveMemory } from '@/lib/workbench/validation';
 import { digest } from '@/lib/engine/runtime';
 import type { Chat, Run } from '@/lib/workbench/types';
+import { listKnowledge } from '@/lib/server/tool-knowledge-store';
 /** Starts the next pending arm on the frozen graph, input, and memory snapshot. */
 async function startExperimentArm(chat: Chat) {
   const experiment = chat.experiment!;
@@ -83,6 +84,7 @@ export async function POST(
       'node',
       'settings',
       'memory',
+      'experiment',
     ];
     if (!allowed.includes(p.action)) throw new HttpError(404, 'Unknown action');
     token = await leaseChat(chat, owner);
@@ -264,10 +266,10 @@ export async function POST(
         if (!version) throw new HttpError(409, 'Design a workflow first.');
         // With no memory to withhold, both arms are the same run and the
         // comparison would measure model variance rather than memory.
-        if (!chat.memory.length)
+        if (!retrieveMemory(chat, chat.messages.filter((m) => m.role === 'user').slice(-3).map((m) => m.content).join(' ')).length)
           throw new HttpError(
             409,
-            'This task has no memory yet, so both arms would be identical. Test the workflow at least once first.',
+            'No relevant task memory matches this workflow, so both arms would be identical. Test the workflow first.',
           );
         chat.experiment = await planExperiment(
           chat,
@@ -275,6 +277,9 @@ export async function POST(
           b.pairs,
           version.id,
           new Date().toISOString(),
+        );
+        chat.experiment.toolKnowledgeSnapshot = await listKnowledge(
+          owner, version.workflow.nodes.flatMap((n) => n.toolkits),
         );
         run = await startExperimentArm(chat);
       } else throw new HttpError(400, 'Unknown experiment operation.');
@@ -300,6 +305,7 @@ export async function POST(
           run.experimentId === chat.experiment.id &&
           run.status === 'awaiting_approval'
         ) {
+          chat.experiment = applyArmResult(chat.experiment, run);
           run.status = 'blocked';
           run.phase = 'done';
           run.pending = null;

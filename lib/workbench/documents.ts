@@ -1,12 +1,12 @@
 export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 export const MAX_INPUT_CHARACTERS = 12000;
-export const DOCUMENT_ACCEPT = '.pdf,.docx,.txt,.md,.csv,.json';
+export const DOCUMENT_ACCEPT = '.xlsx,.pdf,.docx,.txt,.md,.csv,.json';
 export type InputDocument = { name: string; text: string; size: number };
 export function validateDocument(name: string, size: number) {
   const extension = name.toLowerCase().split('.').at(-1) ?? '';
-  if (!['pdf', 'docx', 'txt', 'md', 'csv', 'json'].includes(extension))
+  if (!['xlsx', 'pdf', 'docx', 'txt', 'md', 'csv', 'json'].includes(extension))
     throw new Error(
-      'Choose a PDF, DOCX, TXT, Markdown, CSV, or JSON document.',
+      'Choose an XLSX, PDF, DOCX, TXT, Markdown, CSV, or JSON document.',
     );
   if (!size || size > MAX_DOCUMENT_BYTES)
     throw new Error('Choose a nonempty document smaller than 10 MB.');

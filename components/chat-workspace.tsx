@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import DocumentInput from './document-input';
+import financeDemos from '@/lib/workbench/finance-demos.json';
 import { combineRunInput, type InputDocument } from '@/lib/workbench/documents';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -242,6 +243,12 @@ export default function ChatWorkspace() {
   const manualRun = run?.mode === 'manual' ? run : manualRuns[0];
   const attempt = manualRun?.attempts.at(-1);
   const workflow = chat?.versions.at(-1)?.workflow;
+  const requiredApps = [...new Set(workflow?.nodes.flatMap((n) => n.toolkits) ?? [])]
+    .map(appDefinition).filter((a): a is NonNullable<typeof a> => Boolean(a && !a.noAuth));
+  const missingApps = requiredApps.filter((a) => !integrations?.connections.some((c) =>
+    c.slug === a.slug && (c.connection?.is_active || c.connection?.isActive || c.connection?.connected_account?.status === 'ACTIVE')));
+  const waitingForConnections = requiredApps.length > 0 &&
+    (!integrations || Boolean(integrations.connectionError) || missingApps.length > 0);
   const liveAttempt =
     attempt && JSON.stringify(attempt.workflow) === JSON.stringify(workflow)
       ? attempt
@@ -461,7 +468,7 @@ export default function ChatWorkspace() {
     }
   }
   useEffect(() => {
-    if (!auto || busy || run?.status !== 'running' || inFlight.current) return;
+    if (!auto || busy || run?.status !== 'running' || inFlight.current || waitingForConnections) return;
     const timer = setTimeout(() => void act('advance'), 250);
     return () => clearTimeout(timer);
   });
@@ -838,6 +845,14 @@ export default function ChatWorkspace() {
                 </button>
               ))}
             </div>
+            <section className="finance-demo-gallery" aria-label="Finance demos">
+              <h2>Try a finance workflow</h2>
+              <p>Synthetic Excel workbooks. No accounting accounts needed.</p>
+              {financeDemos.map((d) => <div key={d.id}>
+                <Button variant="ghost" onClick={() => { setDraft(d.prompt); setSelectedApps([]); }}><FileText size={16} />{d.title}</Button>
+                <a href={`/demos/${d.id}.xlsx`} download>Download Excel input</a>
+              </div>)}
+            </section>
           </div>
         ) : (
           <ResizablePanelGroup
@@ -877,6 +892,25 @@ export default function ChatWorkspace() {
                         </div>
                       </article>
                     ),
+                  )}
+                  {workflow && waitingForConnections && (
+                    <article className="wb-message assistant">
+                      <div className="message-avatar"><GitBranch size={15} /></div>
+                      <div className="message-content connection-prompt">
+                        <small>Foundry</small>
+                        <h3>Connect the apps this workflow needs</h3>
+                        <p>{activeRun ? 'The run waits here while you connect your accounts. Your workflow and input are saved.' : 'Connect these accounts before your next run. Your existing workflow and results are saved.'}</p>
+                        {integrations?.connectionError ? <p role="alert">Could not verify connections. Refresh to try again.</p> : missingApps.map((a) => (
+                          <Button key={a.slug} variant="outline" disabled={busy || !integrations?.composio} onClick={() => void connect(a.slug)}>
+                            <AppIcon slug={a.slug} /> Connect {a.name}
+                          </Button>
+                        ))}
+                        <Button variant="ghost" disabled={busy} onClick={() => void refreshIntegrations().catch((e) => setError(e.message))}>
+                          <RotateCcw size={14} /> Check connections
+                        </Button>
+                        <p className="quiet-text">Using uploaded files instead? Stop the current test, then ask in chat to use documents only.</p>
+                      </div>
+                    </article>
                   )}
                   {pendingMessage && (
                     <article className="wb-message user">
@@ -1253,8 +1287,8 @@ export default function ChatWorkspace() {
                         <div className="section-intro learning-section">
                           <h2>Does memory actually help?</h2>
                           <p>
-                            Runs the same input with memory on and off, on a
-                            frozen graph and a frozen memory snapshot. Arms run
+                            Runs the same input with task memory on and off, on a
+                            frozen graph. Tool knowledge stays fixed in both arms. Arms run
                             one at a time and stay out of the conversation.
                           </p>
                         </div>
@@ -1425,6 +1459,21 @@ export default function ChatWorkspace() {
                           onLoading={setReadingDocument}
                           disabled={busy || Boolean(activeRun)}
                         />
+                        {financeDemos.filter((d) => d.title === chat.title).map((d) => <div className="demo-input-actions" key={d.id}>
+                          <Button variant="outline" disabled={busy || Boolean(activeRun) || readingDocument} onClick={async () => {
+                            setReadingDocument(true);
+                            try {
+                              const response = await fetch(`/demos/${d.id}.xlsx`);
+                              if (!response.ok) throw new Error('Could not load the demo workbook.');
+                              const bytes = new Uint8Array(await response.arrayBuffer());
+                              const { extractWorkbook } = await import('@/lib/workbench/xlsx-input');
+                              setInputDocuments([{name:`${d.id}.xlsx`,size:bytes.length,text:extractWorkbook(bytes)}]);
+                              setManualInput('Process the attached synthetic workbook. Return the complete deliverable and exceptions.');
+                            } catch(e) {setError(e instanceof Error ? e.message : 'Could not read workbook');}
+                            finally {setReadingDocument(false);}
+                          }}>Use demo Excel input</Button>
+                          <a href={`/demos/${d.id}.xlsx`} download>Download workbook</a>
+                        </div>)}
                         <p className="quiet-text">
                           {(
                             manualInput.length +
@@ -1524,6 +1573,13 @@ export default function ChatWorkspace() {
                                 tokens · {money(manualRun.usage.costUsd)}
                               </span>
                             </div>
+                            {manualRun.status === 'completed' && <Button variant="outline" size="sm" onClick={() => {
+                              const last = manualRun.attempts.at(-1)!;
+                              const output = last.states.filter((s) => !last.workflow.nodes.some((n) => n.dependsOn.includes(s.nodeId))).map((s) => s.output).join('\n\n');
+                              const url = URL.createObjectURL(new Blob([output], {type:'text/markdown;charset=utf-8'}));
+                              const a = document.createElement('a'); a.href=url; a.download=`foundry-output-${manualRun.id.slice(0,8)}.md`; a.click();
+                              setTimeout(() => URL.revokeObjectURL(url), 1000);
+                            }}>Download final output</Button>}
                             {manualRun.error && (
                               <p role="alert">{manualRun.error}</p>
                             )}

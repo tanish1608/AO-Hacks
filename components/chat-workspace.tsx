@@ -149,6 +149,32 @@ function TaskButton({
     />
   );
 }
+const appGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))',
+  gap: 8,
+  alignItems: 'stretch',
+  width: '100%',
+  minWidth: 0,
+  maxHeight: '46dvh',
+  overflowY: 'auto',
+  overflowX: 'hidden',
+  padding: 1,
+};
+const appTileStyle: React.CSSProperties = {
+  position: 'relative',
+  boxSizing: 'border-box',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'flex-start',
+  gap: 8,
+  width: '100%',
+  minWidth: 0,
+  minHeight: 88,
+  padding: '13px 6px 10px',
+  textAlign: 'center',
+};
 function rememberTask(id: string | null) {
   const url = new URL(window.location.href);
   if (id) url.searchParams.set('task', id);
@@ -1851,7 +1877,7 @@ export default function ChatWorkspace() {
               {!browsedApps.length ? (
                 <p className="all-apps-empty">No apps match “{appQuery}”.</p>
               ) : (
-                <div className="all-apps-grid">
+                <div className="all-apps-grid" style={appGridStyle}>
                   {browsedApps.slice(0, appLimit).map((app) => {
                     const c = integrations?.connections.find(
                       (c) => c.slug === app.slug,
@@ -1864,6 +1890,7 @@ export default function ChatWorkspace() {
                       <button
                         key={app.slug}
                         type="button"
+                        style={appTileStyle}
                         className={connected ? 'connected' : ''}
                         title={app.description}
                         disabled={busy || !integrations?.composio || app.noAuth}

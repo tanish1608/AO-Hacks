@@ -1322,7 +1322,10 @@ export default function ChatWorkspace() {
                               </NativeSelect>
                               <Button
                                 disabled={
-                                  busy || Boolean(activeRun) || !abInput.trim()
+                                  busy ||
+                                  Boolean(activeRun) ||
+                                  !abInput.trim() ||
+                                  !chat.memory.length
                                 }
                                 onClick={() => void beginExperiment()}
                               >
@@ -1331,8 +1334,9 @@ export default function ChatWorkspace() {
                               </Button>
                             </div>
                             <p className="quiet-text">
-                              This spends real model budget: {abPairs * 2} runs,
-                              capped at 2 attempts and 8 tool calls each.
+                              {!chat.memory.length
+                                ? 'This task has no memory yet, so both arms would be identical. Test the workflow at least once first.'
+                                : `This spends real model budget: ${abPairs * 2} runs, capped at 2 attempts and 8 tool calls each.`}
                             </p>
                           </>
                         )}

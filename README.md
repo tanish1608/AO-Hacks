@@ -10,6 +10,8 @@ A conversational workspace for designing, running, evaluating, and improving spe
 - Composio v3 sessions discover real tool schemas and manage account authorization. No external application is connected until its owner authorizes it in Settings.
 - Frozen weighted rubrics combine model judgments with deterministic word-count, required-term, and forbidden-term checks. App-dependent nodes cannot pass without successful tool observations.
 - Proposed lessons are scoped to their chat, retrieved by relevance, and supported or contradicted by later-run evidence. Users can confirm, reject, or remove memories.
+- Tool knowledge is separate and owner-scoped: what runs observed about an app's tools carries into later tasks, so a new task starts informed. It holds argument keys, schema requirements, and classified error tokens only — never argument values, provider text, or task content. A model-authored rule that echoes the task is dropped rather than rewritten.
+- A **Learning** tab charts rubric score and wasted tool calls per run, lists the tool rules learned so far, and runs a paired memory-on/memory-off experiment on a frozen graph and a frozen memory snapshot.
 - Local traces capture tool requests/results, errors, timings, and reported model tokens. LangSmith forwarding is optional and excludes content by default.
 - External mutations require review. Durable receipts prevent blind replay within a run. Unknown outcomes require explicit reconciliation before a new run.
 
@@ -54,6 +56,7 @@ npm run lint
 npm test
 npm run build
 npm run benchmark
+npm run ablate -- "task" --input="fixed input" --pairs=3  # live Gemini; matched memory ablation
 python3 scripts/smoke-workbench.py  # live Gemini; no external app writes
 node --experimental-strip-types scripts/check-composio.ts
 ```
@@ -64,7 +67,11 @@ Lint covers application code and tests. Generated Shadcn UI primitives and the u
 
 ## Evidence and measurement
 
-See [live run evidence](docs/LIVE_RUN_EVIDENCE.json), [repeat evidence](docs/REPEAT_RUN_EVIDENCE.json), and [product direction](docs/PRODUCT_DIRECTION.md). One live writing task improved its frozen rubric score from 0.60 to 1.00 after a deterministic word-count violation triggered a repair (159 words to 181 within a required 160–220 range). A repeat still needed repair (157 to 194 words), so memory is **not yet shown to reduce attempts or cost**. An intervening repeat hit a provider token limit; transport truncation now has one bounded retry with both attempts included in usage.
+See [live run evidence](docs/LIVE_RUN_EVIDENCE.json), [repeat evidence](docs/REPEAT_RUN_EVIDENCE.json), [ablation evidence](docs/ABLATION_EVIDENCE.json), and [product direction](docs/PRODUCT_DIRECTION.md). One live writing task improved its frozen rubric score from 0.60 to 1.00 after a deterministic word-count violation triggered a repair (159 words to 181 within a required 160–220 range).
+
+A matched ablation (`npm run ablate`, one warm-up run then three runs per arm over one fixed input and one frozen graph, tool-free) measured a difference: **memory-on passed 3/3 on the first attempt; memory-off needed two attempts in all three runs and one still failed** (2/3 passed, median rubric score 1.00 vs 0.60 on the failing run). Median tokens were slightly lower with memory (19,132 vs 20,774); median dollar cost was slightly higher ($0.0348 vs $0.0278), because the arms differ in output-token mix and output is priced higher than input. This is one task at n=3 — directional, not a significance test.
+
+An earlier run of the same harness reported the opposite result. It was invalid: the memory snapshot was taken before any run had populated it, so both arms were identical and it measured model variance. The warm-up step and the empty-memory guard exist because of it, and the negative run is retained in the evidence file.
 
 Rubric score is not calibrated accuracy. Measured task accuracy requires independent, held-out cases and ground truth. Repeated-run reliability must include failures. Speed and cost comparisons should use matched inputs, fixed graphs, repeated trials, and a fixed memory snapshot; the supplied live examples are integration evidence, not a generalization benchmark or a causal memory ablation.
 

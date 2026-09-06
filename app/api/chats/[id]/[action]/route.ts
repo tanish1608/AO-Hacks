@@ -262,6 +262,13 @@ export async function POST(
           throw new HttpError(400, `Choose between 1 and ${MAX_PAIRS} pairs.`);
         const version = chat.versions.at(-1);
         if (!version) throw new HttpError(409, 'Design a workflow first.');
+        // With no memory to withhold, both arms are the same run and the
+        // comparison would measure model variance rather than memory.
+        if (!chat.memory.length)
+          throw new HttpError(
+            409,
+            'This task has no memory yet, so both arms would be identical. Test the workflow at least once first.',
+          );
         chat.experiment = await planExperiment(
           chat,
           b.input.trim(),

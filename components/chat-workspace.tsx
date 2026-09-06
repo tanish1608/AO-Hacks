@@ -1835,7 +1835,6 @@ export default function ChatWorkspace() {
         onOpenChange={(open) => {
           setSettingsOpen(open);
           rememberSettings(open);
-          if (!open) setAllAppsOpen(false);
         }}
       >
         <DialogContent className="wb-dialog settings-dialog">
@@ -1927,17 +1926,19 @@ export default function ChatWorkspace() {
               })}
             </div>
             <button
+              style={{ paddingTop: '20px' }}
               type="button"
               className="see-all-apps"
               onClick={() => {
                 setAppQuery('');
                 setAppLimit(120);
+                setSettingsOpen(false);
                 setAllAppsOpen(true);
               }}
             >
-              <Layers3 size={14} />
+              {/* <Layers3 size={14} /> */}
               See all {ALL_APPS.length.toLocaleString()} apps
-              <ArrowUpRight size={12} />
+              {/* <ArrowUpRight size={12} /> */}
             </button>
           </div>
           <div className="settings-section">
@@ -1962,7 +1963,14 @@ export default function ChatWorkspace() {
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={allAppsOpen} onOpenChange={setAllAppsOpen}>
+      <Dialog
+        open={allAppsOpen}
+        onOpenChange={(open) => {
+          setAllAppsOpen(open);
+          // Returning from the catalog lands back where it was opened from.
+          if (!open) setSettingsOpen(true);
+        }}
+      >
         <DialogContent className="wb-dialog all-apps-dialog">
           <DialogHeader>
             <DialogTitle>All apps</DialogTitle>
@@ -2002,7 +2010,7 @@ export default function ChatWorkspace() {
                     disabled={busy || !integrations?.composio || app.noAuth}
                     onClick={() => void connect(app.slug)}
                   >
-                    <AppIcon slug={app.slug} size={26} />
+                    <AppIcon slug={app.slug} size={24} />
                     <span>{app.name}</span>
                     {(connected || app.noAuth) && (
                       <i aria-hidden="true">
@@ -2014,7 +2022,7 @@ export default function ChatWorkspace() {
               })}
             </div>
           )}
-          {browsedApps.length > appLimit && (
+          {browsedApps.length > appLimit ? (
             <Button
               variant="ghost"
               size="sm"
@@ -2023,6 +2031,14 @@ export default function ChatWorkspace() {
               Show more ({(browsedApps.length - appLimit).toLocaleString()}{' '}
               remaining)
             </Button>
+          ) : (
+            browsedApps.length > 0 && (
+              <p className="all-apps-count">
+                {browsedApps.length.toLocaleString()} app
+                {browsedApps.length === 1 ? '' : 's'}
+                {appQuery ? ' matching your search' : ''}
+              </p>
+            )
           )}
         </DialogContent>
       </Dialog>

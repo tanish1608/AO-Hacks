@@ -38,9 +38,10 @@ const CONFIG = [
   'LANGSMITH_PROJECT',
   'LANGSMITH_TRACE_CONTENT',
 ];
+const assets = createAssets(join(DIST, 'client'));
 assignEnv({
   DB: db,
-  ASSETS: createAssets(join(DIST, 'client')),
+  ASSETS: assets,
   ...Object.fromEntries(
     CONFIG.filter((k) => process.env[k]).map((k) => [k, process.env[k]]),
   ),
@@ -66,12 +67,23 @@ function toRequest(req) {
     duplex: hasBody ? 'half' : undefined,
   });
 }
+async function handle(request) {
+  // Cloudflare serves dist/client from its own asset layer before the Worker
+  // ever runs, so the Worker only routes pages. Node has no such layer: without
+  // this the /_next/* chunks fall through to the router and 404, leaving an
+  // unstyled page with no client JS.
+  if (request.method === 'GET' || request.method === 'HEAD') {
+    const asset = await assets.fetch(request);
+    if (asset.status === 200) return asset;
+  }
+  return worker.fetch(request, env, {
+    waitUntil: () => {},
+    passThroughOnException: () => {},
+  });
+}
 const server = createServer(async (req, res) => {
   try {
-    const response = await worker.fetch(toRequest(req), env, {
-      waitUntil: () => {},
-      passThroughOnException: () => {},
-    });
+    const response = await handle(toRequest(req));
     const headers = {};
     for (const [key, value] of response.headers) headers[key] = value;
     res.writeHead(response.status, headers);

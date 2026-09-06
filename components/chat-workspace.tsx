@@ -132,31 +132,7 @@ const examples = [
     description: 'Connect issues, context, and decisions.',
     prompt:
       'Build agents that read GitHub project issues and pull requests, identify release blockers and their owners, and prepare a source-linked weekly status report. I will provide the repository.',
-  },
-  {
-    icon: Layers3,
-    title: 'Reconcile the books',
-    description: 'Match bank exports to ledger entries.',
-    apps: ['quickbooks', 'googlesheets'],
-    prompt:
-      'Build a CFO reconciliation workflow. Read my QuickBooks ledger and a bank transaction export I will provide. Match by amount, currency, date, and reference; distinguish duplicates, timing differences, and unmatched items. Produce a reconciliation table with source IDs and an exception queue for human review. Verify opening balance plus movements equals closing balance. Never invent transactions or post adjusting entries without approval.',
-  },
-  {
-    icon: FileText,
-    title: 'Review invoices before payment',
-    description: 'Find duplicates and route exceptions.',
-    apps: ['xero', 'gmail', 'googledrive'],
-    prompt:
-      'Build an accounts-payable review workflow using Xero invoices and invoice documents I will supply. Check supplier, invoice number, currency, totals, tax, duplicate invoices, and purchase-order evidence where available. Produce a source-linked review register and route missing evidence or mismatches for human review. Do not approve or initiate payments. Ask for company, reporting period, and source references when I run it.',
-  },
-  {
-    icon: GitBranch,
-    title: 'Prepare a weekly cash report',
-    description: 'Explain cash movements and upcoming bills.',
-    apps: ['zoho_books', 'googlesheets'],
-    prompt:
-      'Build a treasury reporting workflow using Zoho Books and my cash spreadsheet. Read current balances, receivables, and payables for the date range I provide. Reconcile opening cash plus receipts minus payments to closing cash by currency, flag missing or stale data, and prepare a weekly cash report with an exceptions list and source references. Keep forecast assumptions separate from observed balances; do not move funds.',
-  },
+  }
 ];
 function TaskButton({
   onClick,
@@ -1835,15 +1811,95 @@ export default function ChatWorkspace() {
         onOpenChange={(open) => {
           setSettingsOpen(open);
           rememberSettings(open);
+          if (!open) setAllAppsOpen(false);
         }}
       >
-        <DialogContent className="wb-dialog settings-dialog">
+        <DialogContent
+          className={`wb-dialog settings-dialog${allAppsOpen ? ' browsing-apps' : ''}`}
+        >
           <DialogHeader>
-            <DialogTitle>Connections & settings</DialogTitle>
+            <DialogTitle>
+              {allAppsOpen ? 'All apps' : 'Connections & settings'}
+            </DialogTitle>
             <DialogDescription>
-              Give your agents access to the tools you work in.
+              {allAppsOpen
+                ? 'Connect an account to let your agents use it. The actual actions are discovered when a workflow runs.'
+                : 'Give your agents access to the tools you work in.'}
             </DialogDescription>
           </DialogHeader>
+          {/* One dialog, two views. A second modal fought this one for the
+              overlay and focus trap, and its content never rendered. */}
+          {allAppsOpen ? (
+            <>
+              <button
+                type="button"
+                className="see-all-apps back-to-settings"
+                onClick={() => setAllAppsOpen(false)}
+              >
+                Back to connections
+              </button>
+              <input
+                className="all-apps-search"
+                aria-label="Search apps"
+                placeholder={`Search ${ALL_APPS.length.toLocaleString()} apps`}
+                value={appQuery}
+                onChange={(e) => {
+                  setAppQuery(e.target.value);
+                  setAppLimit(120);
+                }}
+              />
+              {!browsedApps.length ? (
+                <p className="all-apps-empty">No apps match “{appQuery}”.</p>
+              ) : (
+                <div className="all-apps-grid">
+                  {browsedApps.slice(0, appLimit).map((app) => {
+                    const c = integrations?.connections.find(
+                      (c) => c.slug === app.slug,
+                    );
+                    const connected =
+                      c?.connection?.is_active ||
+                      c?.connection?.isActive ||
+                      c?.connection?.connected_account?.status === 'ACTIVE';
+                    return (
+                      <button
+                        key={app.slug}
+                        type="button"
+                        className={connected ? 'connected' : ''}
+                        title={app.description}
+                        disabled={busy || !integrations?.composio || app.noAuth}
+                        onClick={() => void connect(app.slug)}
+                      >
+                        <AppIcon slug={app.slug} size={24} />
+                        <span>{app.name}</span>
+                        {(connected || app.noAuth) && (
+                          <i aria-hidden="true">
+                            <Check size={10} />
+                          </i>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {browsedApps.length > appLimit ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAppLimit(appLimit + 200)}
+                >
+                  Show more ({(browsedApps.length - appLimit).toLocaleString()}{' '}
+                  remaining)
+                </Button>
+              ) : (
+                <p className="all-apps-count">
+                  {browsedApps.length.toLocaleString()} app
+                  {browsedApps.length === 1 ? '' : 's'}
+                  {appQuery ? ' matching your search' : ''}
+                </p>
+              )}
+            </>
+          ) : (
+            <>
           <div className="provider-setting">
             <span className="provider-icon">
               <AudioLines size={22} />
@@ -1932,7 +1988,6 @@ export default function ChatWorkspace() {
               onClick={() => {
                 setAppQuery('');
                 setAppLimit(120);
-                setSettingsOpen(false);
                 setAllAppsOpen(true);
               }}
             >
@@ -1961,84 +2016,7 @@ export default function ChatWorkspace() {
               require model pricing. App fees are separate.
             </p>
           </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={allAppsOpen}
-        onOpenChange={(open) => {
-          setAllAppsOpen(open);
-          // Returning from the catalog lands back where it was opened from.
-          if (!open) setSettingsOpen(true);
-        }}
-      >
-        <DialogContent className="wb-dialog all-apps-dialog">
-          <DialogHeader>
-            <DialogTitle>All apps</DialogTitle>
-            <DialogDescription>
-              Connect an account to let your agents use it. Discovery of the
-              actual actions happens when a workflow runs.
-            </DialogDescription>
-          </DialogHeader>
-          <input
-            className="all-apps-search"
-            aria-label="Search apps"
-            placeholder={`Search ${ALL_APPS.length.toLocaleString()} apps`}
-            value={appQuery}
-            onChange={(e) => {
-              setAppQuery(e.target.value);
-              setAppLimit(120);
-            }}
-          />
-          {!browsedApps.length ? (
-            <p className="all-apps-empty">No apps match “{appQuery}”.</p>
-          ) : (
-            <div className="all-apps-grid">
-              {browsedApps.slice(0, appLimit).map((app) => {
-                const c = integrations?.connections.find(
-                  (c) => c.slug === app.slug,
-                );
-                const connected =
-                  c?.connection?.is_active ||
-                  c?.connection?.isActive ||
-                  c?.connection?.connected_account?.status === 'ACTIVE';
-                return (
-                  <button
-                    key={app.slug}
-                    type="button"
-                    className={connected ? 'connected' : ''}
-                    title={app.description}
-                    disabled={busy || !integrations?.composio || app.noAuth}
-                    onClick={() => void connect(app.slug)}
-                  >
-                    <AppIcon slug={app.slug} size={24} />
-                    <span>{app.name}</span>
-                    {(connected || app.noAuth) && (
-                      <i aria-hidden="true">
-                        <Check size={10} />
-                      </i>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {browsedApps.length > appLimit ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAppLimit(appLimit + 200)}
-            >
-              Show more ({(browsedApps.length - appLimit).toLocaleString()}{' '}
-              remaining)
-            </Button>
-          ) : (
-            browsedApps.length > 0 && (
-              <p className="all-apps-count">
-                {browsedApps.length.toLocaleString()} app
-                {browsedApps.length === 1 ? '' : 's'}
-                {appQuery ? ' matching your search' : ''}
-              </p>
-            )
+            </>
           )}
         </DialogContent>
       </Dialog>

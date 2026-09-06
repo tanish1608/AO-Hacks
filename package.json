@@ -16,15 +16,18 @@
     "typecheck": "tsc --noEmit",
     "agent:run": "node --experimental-strip-types scripts/run-agent.ts",
     "benchmark": "node --experimental-strip-types scripts/benchmark.ts",
-    "ablate": "node --experimental-strip-types scripts/ablate.ts"
+    "ablate": "node --experimental-strip-types scripts/ablate.ts",
+    "serve": "node server/index.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
     "@cfworker/json-schema": "4.1.1",
+    "@google-cloud/storage": "^8.0.1",
     "@langchain/core": "1.2.9",
     "@langchain/langgraph": "1.4.14",
     "@shadcn/react": "0.3.0",
     "@xyflow/react": "12.11.6",
+    "better-sqlite3": "^13.0.3",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",

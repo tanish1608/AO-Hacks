@@ -4364,3 +4364,13 @@ h3 {
 .all-apps-grid>button>i{position:absolute;top:5px;right:5px;display:flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#2d3f79;color:#fff}
 .all-apps-count{font-size:10px;color:#98a2b2;margin-top:10px}
 .all-apps-empty{font-size:12px;color:#98a2b2;padding:18px 2px}
+
+/* Home screen: centered column, and a scrollbar that stays out of the way.
+   The panel still scrolls, so nothing below the fold becomes unreachable. */
+.wb-home{align-items:center;scrollbar-width:none;-ms-overflow-style:none}
+.wb-home::-webkit-scrollbar{width:0;height:0;display:none}
+.home-intro{text-align:center}
+.home-intro>p:last-child{margin-inline:auto;max-width:60ch}
+.home-compose{width:100%;max-width:720px;margin-inline:auto}
+.starter-grid{width:100%;max-width:720px;margin-inline:auto}
+.finance-demo-gallery{width:min(100%,720px);margin-inline:auto}

@@ -2,11 +2,7 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-.finance-demo-gallery { width: min(100%, 760px); margin: 24px auto; text-align: left; }
-.finance-demo-gallery h2 { font-size: 15px; font-weight: 600; }
-.finance-demo-gallery > p { color: #64748b; font-size: 13px; margin: 6px 0 12px; }
-.finance-demo-gallery > div { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid #e5e7eb; flex-wrap:wrap; }
-.finance-demo-gallery a, .demo-input-actions a { font-size:12px; text-decoration:underline; text-underline-offset:3px; }
+.demo-input-actions a { font-size:12px; text-decoration:underline; text-underline-offset:3px; }
 .demo-input-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:12px 0; }
 .connection-prompt { border:1px solid #dbe2ec; padding:16px; border-radius:12px; background:#f8fafc; }
 .connection-prompt h3 { font-weight:600; }
@@ -4344,3 +4340,15 @@ h3 {
 .paired-bar>strong{font-size:11px;font-weight:450;color:#64758e;text-align:right}
 .memory-status.confirmed{border-color:#2d3f79;color:#2d3f79}
 .memory-status.retired{opacity:.55}
+
+/* Starter rows: one click target per task, with its sample workbook alongside. */
+.starter-row{display:flex;align-items:center;gap:10px;border-bottom:1px solid #eceef1}
+.starter-row>button{flex:1;min-width:0;border-bottom:0!important}
+.starter-row>a{flex-shrink:0;font-size:11px;color:#98a2b2;text-decoration:none;padding:4px 9px;border:1px solid #e5e9ef;border-radius:6px;white-space:nowrap}
+.starter-row>a:hover{color:#43516a;border-color:#c3ccdb}
+@media (max-width:560px){.starter-row>a{display:none}}
+/* Settings reuses the composer picker's browse controls. */
+.settings-browse{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 4px}
+.settings-browse label{display:flex;align-items:center;gap:7px;font-size:11px;color:#98a2b2}
+.settings-browse select,.settings-browse input{font-size:11px;padding:5px 8px;border:1px solid #e1e6ee;border-radius:6px;background:#fff;color:#43516a}
+.settings-browse input{flex:1;min-width:130px}

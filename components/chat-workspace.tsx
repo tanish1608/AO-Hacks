@@ -25,6 +25,7 @@ import financeDemos from '@/lib/workbench/finance-demos.json';
 import { combineRunInput, type InputDocument } from '@/lib/workbench/documents';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import BrandLogo from './brand-logo';
 import WorkflowCanvas from './workflow-canvas';
 import AppPicker, { AppIcon } from './app-picker';
 import RunConversation from './run-conversation';
@@ -731,7 +732,7 @@ export default function ChatWorkspace() {
         <SidebarHeader>
           <button className="wb-brand" onClick={newChat}>
             <span className="brand-mark">
-              <GitBranch size={20} />
+              <BrandLogo size={31} />
             </span>
             <span>
               foundry<span className="brand-dot">.</span>
@@ -915,7 +916,7 @@ export default function ChatWorkspace() {
                       <article key={m.id} className={`wb-message ${m.role}`}>
                         <div className="message-avatar">
                           {m.role === 'assistant' ? (
-                            <GitBranch size={15} />
+                            <BrandLogo size={20} />
                           ) : (
                             <span>Y</span>
                           )}
@@ -933,7 +934,9 @@ export default function ChatWorkspace() {
                   )}
                   {workflow && waitingForConnections && (
                     <article className="wb-message assistant">
-                      <div className="message-avatar"><GitBranch size={15} /></div>
+                      <div className="message-avatar">
+                        <BrandLogo size={20} />
+                      </div>
                       <div className="message-content connection-prompt">
                         <small>Foundry</small>
                         <h3>Connect the apps this workflow needs</h3>

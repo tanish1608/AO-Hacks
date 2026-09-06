@@ -4374,3 +4374,9 @@ h3 {
 .home-compose{width:100%;max-width:720px;margin-inline:auto}
 .starter-grid{width:100%;max-width:720px;margin-inline:auto}
 .finance-demo-gallery{width:min(100%,720px);margin-inline:auto}
+
+/* Brand mark: the artwork carries its own frame and is drawn in black, so the
+   container drops its dark fill rather than hiding the logo inside it. */
+.brand-logo{display:block;object-fit:contain}
+.brand-mark{background:transparent!important;color:inherit;padding:0;overflow:hidden}
+.wb-message.assistant .message-avatar{background:transparent;display:grid;place-items:center}

@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  icons: { icon: '/favicon.svg' },
+  icons: { icon: '/logo.png' },
   title: 'Agent Foundry — Automated Agent Engineering',
   description: 'Build, evaluate, and improve agents with independent evidence.',
 };

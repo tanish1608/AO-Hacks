@@ -1,3 +1,8 @@
+import {
+  runRecoveryChecks,
+  recoveryCheckMessage,
+} from '@/lib/workbench/recovery-checks';
+import { advanceResilient } from '@/lib/workbench/recovery';
 import { retainMessages } from '@/lib/workbench/messages';
 import { validateAppSelection } from '@/lib/workbench/apps';
 import {
@@ -17,7 +22,6 @@ import {
 } from '@/lib/server/workbench-store';
 import { dependencies } from '@/lib/server/workbench-provider';
 import {
-  advanceChatRun,
   announceTest,
   design,
   executePending,
@@ -42,6 +46,7 @@ export async function POST(
     if (b.revision !== chat.revision)
       throw new HttpError(409, 'Chat changed. Refresh before continuing.');
     const allowed = [
+      'recovery-checks',
       'message',
       'run',
       'advance',
@@ -79,7 +84,15 @@ export async function POST(
         409,
         'Reconcile the previous external action before starting another run.',
       );
-    if (p.action === 'message') {
+    if (p.action === 'recovery-checks') {
+      const report = await runRecoveryChecks();
+      chat.messages.push({
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        createdAt: report.at,
+        content: recoveryCheckMessage(report),
+      });
+    } else if (p.action === 'message') {
       if (
         typeof b.message !== 'string' ||
         !b.message.trim() ||
@@ -196,7 +209,7 @@ export async function POST(
           throw new HttpError(409, 'Run is not active');
         try {
           const deps = await dependencies(owner, chat, run);
-          const next = await advanceChatRun(chat, run, deps);
+          const next = await advanceResilient(chat, run, deps);
           chat = next.chat;
           run = next.run;
         } catch (e) {

@@ -30,9 +30,11 @@ Open `http://127.0.0.1:3000`. Local sign-in is provided by Sites. Production use
 2. Inspect the generated workflow. Click an agent to edit its instruction; use chat to change structure, tools, or requirements.
 3. Choose apps from the icon dropdown and connect required accounts in Settings. App selection is applied with your next message.
 4. A generated sample test starts automatically after each workflow design or chat revision. Agent outputs, checks, reflections, and repairs appear in chat. Failed checks trigger another attempt with the same sample, up to the limit. **View test results** opens detailed checks and logs.
-5. Choose **Run with my input** in the workflow panel, paste your own content, and run the architecture once. Manual inputs and outputs stay under **My runs**; they do not trigger test repair or memory updates. Continue chatting to revise the same task. On narrow screens, switch between **Chat** and **Workflow**.
+5. Choose **Run with my input** in the workflow panel, paste your own content or attach PDF/DOCX/TXT/MD/CSV/JSON documents, review their extracted text, and run the architecture once. Attach up to three files (10 MB each); combined text is limited to 12,000 characters. Scanned PDFs require OCR first. Manual inputs and outputs stay under **My runs**; they do not trigger test repair or memory updates. Continue chatting to revise the same task. On narrow screens, switch between **Chat** and **Workflow**.
 
 The current preview advances checkpointed steps while the selected task is open and Continue is enabled. Closing it saves progress; reopen and Continue to resume. A durable background queue is a production deployment requirement, not implemented by keeping a browser alive.
+
+**Recovery checks** posts six deterministic fault-injection checks in the task chat. During actual tests, bounded transient read retries and stagnation stops also appear in chat, with logs in detailed results. See [the applied research and scope](docs/RECOVERY_RESEARCH.md).
 
 ## Verification
 

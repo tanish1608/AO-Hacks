@@ -23,6 +23,8 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
+import DocumentInput from './document-input';
+import { combineRunInput, type InputDocument } from '@/lib/workbench/documents';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import WorkflowCanvas from './workflow-canvas';
@@ -182,6 +184,8 @@ export default function ChatWorkspace() {
     [designing, setDesigning] = useState(false),
     [pendingMessage, setPendingMessage] = useState(''),
     [manualInput, setManualInput] = useState(''),
+    [inputDocuments, setInputDocuments] = useState<InputDocument[]>([]),
+    [readingDocument, setReadingDocument] = useState(false),
     [manualStarting, setManualStarting] = useState(false),
     [resultsId, setResultsId] = useState('');
   const [reconciliation, setReconciliation] = useState('');
@@ -219,6 +223,8 @@ export default function ChatWorkspace() {
     if (inFlight.current) return;
     setAuto(false);
     selectedId.current = id;
+    setInputDocuments([]);
+    setManualInput('');
     setBusy(true);
     setError('');
     try {
@@ -437,13 +443,15 @@ export default function ChatWorkspace() {
       const data = await act('run', {
         useMemory,
         mode: 'manual',
-        input: manualInput,
+        input: combineRunInput(manualInput, inputDocuments),
       });
       if (data) {
         setSelectedRunId(data.runs[0]?.id ?? '');
         setAuto(true);
         setTab('manual');
       }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not prepare input');
     } finally {
       setManualStarting(false);
     }
@@ -473,6 +481,7 @@ export default function ChatWorkspace() {
     setSnapshot(null);
     setPendingMessage('');
     setManualInput('');
+    setInputDocuments([]);
     setResultsId('');
     setSelectedApps([]);
     setMobileView('chat');
@@ -909,6 +918,14 @@ export default function ChatWorkspace() {
                   {!designing && workflow && (
                     <div className="chat-test-controls">
                       <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy || Boolean(activeRun)}
+                        onClick={() => void act('recovery-checks')}
+                      >
+                        Recovery checks
+                      </Button>
+                      <Button
                         size="icon-sm"
                         variant="ghost"
                         aria-label="Test limits"
@@ -1175,6 +1192,23 @@ export default function ChatWorkspace() {
                             rows={5}
                           />
                         </label>
+                        <DocumentInput
+                          key={chat.id}
+                          documents={inputDocuments}
+                          onChange={setInputDocuments}
+                          onLoading={setReadingDocument}
+                          disabled={busy || Boolean(activeRun)}
+                        />
+                        <p className="quiet-text">
+                          {(
+                            manualInput.length +
+                            inputDocuments.reduce(
+                              (n, d) => n + d.text.length + d.name.length + 12,
+                              0,
+                            )
+                          ).toLocaleString()}{' '}
+                          / 12,000 input characters
+                        </p>
                         <div className="manual-controls">
                           {activeRun?.mode === 'manual' ? (
                             <>
@@ -1214,7 +1248,15 @@ export default function ChatWorkspace() {
                               disabled={
                                 busy ||
                                 Boolean(activeRun) ||
-                                !manualInput.trim()
+                                readingDocument ||
+                                manualInput.length +
+                                  inputDocuments.reduce(
+                                    (n, d) =>
+                                      n + d.text.length + d.name.length + 12,
+                                    0,
+                                  ) >
+                                  12000 ||
+                                (!manualInput.trim() && !inputDocuments.length)
                               }
                               onClick={() => void beginManual()}
                             >
@@ -1286,6 +1328,15 @@ export default function ChatWorkspace() {
                                 </div>
                               </details>
                             ))}
+                            {manualRun.attempts
+                              .flatMap((a) => a.traces)
+                              .filter((t) => t.name.startsWith('Recovery:'))
+                              .map((t) => (
+                                <details className="schema-detail" key={t.id}>
+                                  <summary>{t.name}</summary>
+                                  <p>{t.output}</p>
+                                </details>
+                              ))}
                             {run?.mode === 'manual' && actionReview}
                           </>
                         )}

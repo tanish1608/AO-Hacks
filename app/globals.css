@@ -4203,3 +4203,54 @@ h3 {
   overflow-wrap: anywhere;
   min-width: 0;
 }
+
+.document-input {
+  margin-top: 14px;
+}
+.document-input .quiet-text {
+  font-size: 11px;
+  line-height: 1.7;
+  margin: 8px 0;
+}
+.input-document {
+  border: 1px solid #e0e3e8;
+  border-radius: 8px;
+  margin: 8px 0;
+  padding: 10px;
+}
+.input-document summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  font-size: 12px;
+}
+.input-document summary span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.input-document summary small {
+  color: #747a84;
+  font-size: 10px;
+}
+.input-document label {
+  display: block;
+  font-size: 11px;
+  margin: 12px 0 4px;
+}
+.input-document textarea {
+  display: block;
+  width: 100%;
+  min-height: 160px;
+  resize: vertical;
+  border: 1px solid #e0e3e8;
+  border-radius: 5px;
+  padding: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.document-error {
+  color: #b33b43;
+  font-size: 12px;
+  margin: 8px 0;
+}

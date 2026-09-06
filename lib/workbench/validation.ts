@@ -7,6 +7,7 @@ import type {
   Workflow,
 } from './types.ts';
 import { digest } from '../engine/runtime.ts';
+import { needsZohoDraftDelivery, verifiedZohoDrafts } from './zoho-tools.ts';
 const text = (v: unknown, max: number) =>
   typeof v === 'string' && v.trim().length > 0 && v.length <= max;
 export function validateWorkflow(input: unknown): Workflow {
@@ -173,8 +174,9 @@ export function normalizeEvaluation(
         (t) => t.nodeId === n.id && t.kind === 'tool' && !t.error,
       ),
   );
+  const missingZohoDelivery = needsZohoDraftDelivery(attempt) && verifiedZohoDrafts(attempt).length === 0;
   const blocked =
-    attempt.states.some((s) => s.status !== 'done') || missingToolEvidence;
+    attempt.states.some((s) => s.status !== 'done') || missingToolEvidence || missingZohoDelivery;
   const score = blocked
     ? 0
     : checks.reduce(
@@ -190,7 +192,7 @@ export function normalizeEvaluation(
   return {
     score,
     verdict: blocked
-      ? attempt.states.some(
+      ? missingZohoDelivery || attempt.states.some(
           (s) =>
             s.blockReason === 'connection' ||
             s.blockReason === 'input' ||
@@ -202,8 +204,11 @@ export function normalizeEvaluation(
         ? 'pass'
         : 'revise',
     checks,
-    summary: raw.summary.slice(0, 4000),
+    summary: missingZohoDelivery
+      ? 'No verified draft invoices were created in Zoho Books. These results cover preparation or simulation only. Resolve customer/tax mappings and approve a live draft creation before claiming delivery.'
+      : raw.summary.slice(0, 4000),
     issues: [
+      ...(missingZohoDelivery ? ['Live Zoho delivery is unverified: 0 draft invoices with creation and read-back evidence. Read/list calls and simulated payloads do not satisfy invoice creation.'] : []),
       ...(missingToolEvidence
         ? ['An agent requiring app access has no successful tool evidence.']
         : []),

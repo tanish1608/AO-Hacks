@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import type { Run } from '@/lib/workbench/types';
+import { deliveryEvaluation } from '@/lib/workbench/zoho-tools';
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,7 @@ export default function TestResults({
         ? run.attempts.length - 1
         : Math.min(index, run.attempts.length - 1)
     ];
+  const evaluation = attempt ? deliveryEvaluation(attempt) : undefined;
   return (
     <Dialog
       open
@@ -68,7 +70,7 @@ export default function TestResults({
                   <NativeSelectOption key={a.id} value={a.iteration}>
                     Attempt {a.iteration} ·{' '}
                     {a.evaluation
-                      ? Math.round(a.evaluation.score * 100) + '%'
+                      ? Math.round(deliveryEvaluation(a)!.score * 100) + '%'
                       : 'Pending'}
                   </NativeSelectOption>
                 ))}
@@ -77,8 +79,8 @@ export default function TestResults({
             <div className="run-facts">
               <span>
                 <strong>
-                  {attempt.evaluation
-                    ? Math.round(attempt.evaluation.score * 100) + '%'
+                  {evaluation
+                    ? Math.round(evaluation.score * 100) + '%'
                     : 'Pending'}
                 </strong>
                 rubric score
@@ -149,7 +151,7 @@ export default function TestResults({
               </pre>
             </details>
             <p>
-              {attempt.evaluation?.summary ??
+              {evaluation?.summary ??
                 run.error ??
                 'The test is still running.'}
             </p>

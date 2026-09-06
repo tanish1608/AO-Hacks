@@ -4,6 +4,8 @@
 
 **Automated Agent Engineering · September 2026**
 
+### Deployment link: [agent-foundry-826928184760.us-central1.run.app](https://agent-foundry-826928184760.us-central1.run.app)
+
 This report describes the implemented system and experiments preserved in this repository. It is a project technical report, not a peer-reviewed publication.
 
 ![Agent Foundry home screen](public/home.JPG)

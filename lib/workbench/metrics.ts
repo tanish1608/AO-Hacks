@@ -1,4 +1,5 @@
 import type { Run, RunMetric } from './types.ts';
+import { deliveryEvaluation } from './zoho-tools.ts';
 /** Medians, not means: arm sample sizes are tiny and outliers would dominate. */
 export function median(values: number[]): number | null {
   if (!values.length) return null;
@@ -9,6 +10,7 @@ export function median(values: number[]): number | null {
 export function runMetrics(run: Run): RunMetric {
   const traces = run.attempts.flatMap((a) => a.traces);
   const last = run.attempts.at(-1);
+  const evaluation = last ? deliveryEvaluation(last) : null;
   const tools = traces.filter((t) => t.kind === 'tool');
   const searches = traces.filter((t) => t.kind === 'search');
   return {
@@ -19,8 +21,8 @@ export function runMetrics(run: Run): RunMetric {
     useMemory: run.useMemory,
     status: run.status,
     attempts: run.attempts.length,
-    passed: run.mode !== 'manual' && run.status === 'completed' && Boolean(last?.evaluation),
-    score: last?.evaluation?.score ?? null,
+    passed: run.mode !== 'manual' && run.status === 'completed' && evaluation?.verdict === 'pass',
+    score: evaluation?.score ?? null,
     inputTokens: run.usage.inputTokens,
     outputTokens: run.usage.outputTokens,
     // Unknown pricing stays null. Never report an unpriced run as free.

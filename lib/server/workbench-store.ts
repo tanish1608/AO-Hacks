@@ -1,5 +1,6 @@
 import type { Chat, Run, RunMetric } from '../workbench/types';
 import { runMetrics } from '../workbench/metrics';
+import { needsZohoDraftDelivery } from '../workbench/zoho-tools';
 import { listKnowledge } from './tool-knowledge-store';
 import { database } from './store';
 import { HttpError } from './security';
@@ -221,5 +222,12 @@ export async function snapshot(chat: Chat, owner: string) {
     listRunMetrics(chat.id, owner).catch(() => []),
     listKnowledge(owner, chatToolkits(chat)).catch(() => []),
   ]);
-  return { chat: publicChat(chat), runs, metrics, knowledge };
+  const correctedMetrics = metrics.map(metric => {
+    const run = runs.find(r => r.id === metric.runId);
+    const attempt = run?.attempts.at(-1);
+    if (!run || !attempt || !needsZohoDraftDelivery(attempt)) return metric;
+    const current = runMetrics(run);
+    return { ...metric, score: current.score, passed: current.passed };
+  });
+  return { chat: publicChat(chat), runs, metrics: correctedMetrics, knowledge };
 }

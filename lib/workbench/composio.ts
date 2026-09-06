@@ -5,6 +5,7 @@ import {
 } from './search-tools.ts';
 import { isReviewedRead } from './tool-policy.ts';
 import type { DiscoveredTool } from './types.ts';
+import { executeZohoTool, isZohoTool, zohoTools } from './zoho-tools.ts';
 type Schema = {
   toolkit: string;
   tool_slug: string;
@@ -84,7 +85,7 @@ export class ComposioGateway {
         (t) => full.data?.tool_schemas?.[t.tool_slug] ?? t,
       );
     }
-    return selected
+    const discovered: DiscoveredTool[] = selected
       .filter(
         (t) =>
           t.input_schema &&
@@ -103,8 +104,14 @@ export class ComposioGateway {
           (c) => c.toolkit.toLowerCase() === t.toolkit.toLowerCase(),
         )?.has_active_connection,
       }));
+    if (allowed.includes('zoho_books')) {
+      const connected = data.toolkit_connection_statuses?.find(c => c.toolkit.toLowerCase() === 'zoho_books')?.has_active_connection;
+      discovered.push(...zohoTools(connected));
+    }
+    return discovered;
   }
   async execute(sessionId: string, slug: string, args: unknown) {
+    if (isZohoTool(slug)) return executeZohoTool(this.request.bind(this), sessionId, slug, args);
     const result = await this.request<{
       data?: unknown;
       error?: string;

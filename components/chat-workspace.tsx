@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import DocumentInput from './document-input';
 import financeDemos from '@/lib/workbench/finance-demos.json';
+import { zohoInvoiceStarter } from '@/lib/workbench/starter-prompts';
 import { combineRunInput, type InputDocument } from '@/lib/workbench/documents';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -109,6 +110,12 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
 const percent = (x: number) => `${Math.round(x * 100)}%`;
 const money = (x: number | null) =>
   x === null ? 'Unpriced' : `$${x.toFixed(4)}`;
+const financeStarters = financeDemos.map((demo) => ({
+  ...demo,
+  ...(demo.id === 'invoice-drafts'
+    ? zohoInvoiceStarter
+    : { apps: [] as string[] }),
+}));
 const examples = [
   {
     icon: FileText,
@@ -886,9 +893,9 @@ export default function ChatWorkspace() {
             </div>
             <section className="finance-demo-gallery" aria-label="Finance demos">
               <h2>Try a finance workflow</h2>
-              <p>Synthetic Excel workbooks. No accounting accounts needed.</p>
-              {financeDemos.map((d) => <div key={d.id}>
-                <Button variant="ghost" onClick={() => { setDraft(d.prompt); setSelectedApps([]); }}><FileText size={16} />{d.title}</Button>
+              <p>Synthetic Excel inputs. Invoice creation requires Zoho Books; the other examples run without connected apps.</p>
+              {financeStarters.map((d) => <div key={d.id}>
+                <Button variant="ghost" onClick={() => { setDraft(d.prompt); setSelectedApps(d.apps); }}><FileText size={16} />{d.title}</Button>
                 <a href={`/demos/${d.id}.xlsx`} download>Download Excel input</a>
               </div>)}
             </section>
@@ -1500,7 +1507,7 @@ export default function ChatWorkspace() {
                           onLoading={setReadingDocument}
                           disabled={busy || Boolean(activeRun)}
                         />
-                        {financeDemos.filter((d) => d.title === chat.title).map((d) => <div className="demo-input-actions" key={d.id}>
+                        {financeDemos.filter((d) => d.title === chat.title || financeStarters.find((starter) => starter.id === d.id)?.title === chat.title).map((d) => <div className="demo-input-actions" key={d.id}>
                           <Button variant="outline" disabled={busy || Boolean(activeRun) || readingDocument} onClick={async () => {
                             setReadingDocument(true);
                             try {

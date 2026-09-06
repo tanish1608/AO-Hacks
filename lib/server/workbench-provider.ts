@@ -8,6 +8,8 @@ import { database } from './store';
 import { HttpError } from './security';
 import { knowledgeStore } from './tool-knowledge-store';
 import { frozenKnowledge } from '../workbench/experiment';
+import { zohoTools } from '../workbench/zoho-tools';
+import { isReviewedRead } from '../workbench/tool-policy';
 import {
   applyLiveness,
   liveToolkits,
@@ -80,8 +82,13 @@ export async function dependencies(
         );
         if (cached) {
           const live = await liveToolkits(g, session);
-          if (live && cached.every((t) => live.has(t.toolkit.toLowerCase())))
-            return applyLiveness(cached, live);
+          if (live && cached.every((t) => live.has(t.toolkit.toLowerCase()))) {
+            const current = applyLiveness(cached, live)
+              .filter(t => !t.slug.startsWith('FOUNDRY_ZOHO_'))
+              .map(t => ({ ...t, readOnly: t.readOnly || isReviewedRead(t.slug) }));
+            if (allowed.includes('zoho_books')) current.push(...zohoTools(live.has('zoho_books')));
+            return current;
+          }
         }
         const fresh = await g.search(session, query, allowed);
         if (!run?.experimentId)

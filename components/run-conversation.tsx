@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Check, FlaskConical, GitBranch, X, ChevronRight } from 'lucide-react';
 import type { Message, Run } from '@/lib/workbench/types';
+import { deliveryEvaluation, needsZohoDraftDelivery, verifiedZohoDrafts } from '@/lib/workbench/zoho-tools';
 export default function RunConversation({
   message,
   run,
@@ -15,7 +16,11 @@ export default function RunConversation({
 }) {
   const attempt = run?.attempts.find((a) => a.id === message.attemptId);
   const node = attempt?.workflow.nodes.find((n) => n.id === message.nodeId);
-  const evaluation = attempt?.evaluation;
+  const zohoDelivery = attempt && needsZohoDraftDelivery(attempt);
+  const verifiedDrafts = attempt ? verifiedZohoDrafts(attempt) : [];
+  // Historical runs retain their raw judge result; never display it as proof
+  // that an invoice was created when actual tool evidence says otherwise.
+  const evaluation = attempt ? deliveryEvaluation(attempt) : undefined;
   const terminal =
     node && !attempt?.workflow.nodes.some((n) => n.dependsOn.includes(node.id));
   if (message.kind === 'evaluation' && evaluation && run)
@@ -30,10 +35,11 @@ export default function RunConversation({
             }
           >
             {Math.round(evaluation.score * 100)}% ·{' '}
-            {evaluation.verdict === 'pass' ? 'Passed' : 'Needs work'}
+            {evaluation.verdict === 'pass' ? 'Passed' : evaluation.verdict === 'blocked' ? 'Blocked' : 'Needs work'}
           </span>
         </header>
         <p>{evaluation.summary}</p>
+        {zohoDelivery && <p><strong>{verifiedDrafts.length} verified Zoho draft invoices</strong> · requires creation and read-back evidence.</p>}
         <div className="test-checks">
           {run.rubric.map((c) => {
             const check = evaluation.checks.find((k) => k.criterionId === c.id);

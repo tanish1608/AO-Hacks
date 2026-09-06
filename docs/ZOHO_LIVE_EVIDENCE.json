@@ -1,0 +1,43 @@
+{
+  "collectedAt": "2026-09-06T21:56:51.538914+00:00",
+  "scope": "User-authorized direct connector smoke run using synthetic invoice-drafts.xlsx data. Not an autonomous model run or a task accuracy benchmark.",
+  "organization": {
+    "id": "938129328",
+    "name": "idk"
+  },
+  "customer": {
+    "id": "1386877000000099001",
+    "name": "DEMO - Northstar Studio - EUR"
+  },
+  "invoice": {
+    "invoice_id": "1386877000000101001",
+    "invoice_number": "INV-000001",
+    "reference_number": "FOUNDRY-DEMO-INVOICE-DRAFTS-C1-EUR-20260906",
+    "status": "draft",
+    "is_emailed": false,
+    "payment_reminder_enabled": false,
+    "currency_code": "EUR",
+    "sub_total": 600,
+    "tax_total": 0,
+    "total": 600
+  },
+  "verifiedBy": "Zoho GET invoice after creation and disabling default payment reminders",
+  "held": [
+    {
+      "group": "C1 USD",
+      "total": 1188,
+      "reason": "Sales Tax disabled in Zoho; supplied 8% rate has no configured tax ID."
+    },
+    {
+      "group": "C3 USD",
+      "total": 210,
+      "reason": "Sales Tax disabled in Zoho; supplied 5% rate has no configured tax ID."
+    },
+    {
+      "group": "C2 USD",
+      "total": 750,
+      "reason": "Source customer has no billing address."
+    }
+  ],
+  "taxSetup": "Attempt to create demo tax rates was rejected by Zoho with code 110817. Organization tax-registration settings were not changed."
+}

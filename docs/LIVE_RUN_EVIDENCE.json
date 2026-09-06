@@ -1,0 +1,121 @@
+{
+  "task": "Atlas Notes product launch blog from a supplied brief",
+  "model": "gemini-3.8-flash",
+  "scope": "Single live task, same frozen rubric across attempts; not a held-out accuracy benchmark or causal memory study.",
+  "status": "completed",
+  "attempts": [
+    {
+      "iteration": 1,
+      "score": 0.6,
+      "checks": [
+        {
+          "criterionId": "crit_word_count",
+          "score": 0,
+          "rationale": "Deterministic check: 159 whitespace-separated words in the final output (including headings); expected 160\u2013220.",
+          "evidenceIds": [
+            "6583072d-53ca-4d9b-b03e-b3837d46671a"
+          ],
+          "verified": true
+        },
+        {
+          "criterionId": "crit_required_terms",
+          "score": 1,
+          "rationale": "Deterministic contains check passed for the specified literal terms.",
+          "evidenceIds": [
+            "6583072d-53ca-4d9b-b03e-b3837d46671a"
+          ],
+          "verified": true
+        },
+        {
+          "criterionId": "crit_brief_adherence",
+          "score": 1,
+          "rationale": "The post has a title and exactly three short sections. It addresses small research teams in a practical, direct tone and does not invent any features, pricing, statistics, citations, or external links.",
+          "evidenceIds": [
+            "6583072d-53ca-4d9b-b03e-b3837d46671a"
+          ],
+          "verified": true
+        }
+      ],
+      "graphDigest": "9108387ca48761b93b8d418cc91baf0ad8f54af31480c1f3b2b5663668ef6ed8",
+      "instructions": [
+        {
+          "id": "writer_agent",
+          "instruction": "Draft a concise product launch blog based exclusively on the provided brief for 'Atlas Notes'. Include a title and three short sections targeting small research teams with a practical and direct tone. Cover only offline writing, Markdown export, and shared notebooks. Do not invent any pricing, stats, citations, links, or unmentioned features. Aim for approximately 180-200 words."
+        },
+        {
+          "id": "reviewer_agent",
+          "instruction": "Review and refine the draft from writer_agent. Ensure the final text strictly contains a title and three short sections, adheres to a practical and direct tone, mentions only the brief's features (offline writing, Markdown export, shared notebooks), invents no external facts/stats/pricing/links, and totals strictly between 160 and 220 words (all text included). Output only the final revised post."
+        }
+      ],
+      "activeStepSeconds": 7.996
+    },
+    {
+      "iteration": 2,
+      "score": 1,
+      "checks": [
+        {
+          "criterionId": "crit_word_count",
+          "score": 1,
+          "rationale": "Deterministic check: 181 whitespace-separated words in the final output (including headings); expected 160\u2013220.",
+          "evidenceIds": [
+            "74823ab9-c7e6-4c6d-9518-b88fc24a9ee4"
+          ],
+          "verified": true
+        },
+        {
+          "criterionId": "crit_required_terms",
+          "score": 1,
+          "rationale": "Deterministic contains check passed for the specified literal terms.",
+          "evidenceIds": [
+            "74823ab9-c7e6-4c6d-9518-b88fc24a9ee4"
+          ],
+          "verified": true
+        },
+        {
+          "criterionId": "crit_brief_adherence",
+          "score": 1,
+          "rationale": "The blog has a clear title and three distinct sections, uses a practical and direct tone aimed at small research teams, and avoids inventing features, pricing, statistics, citations, or external links.",
+          "evidenceIds": [
+            "74823ab9-c7e6-4c6d-9518-b88fc24a9ee4"
+          ],
+          "verified": true
+        }
+      ],
+      "graphDigest": "86f5c4a5acb8bc1ddf6b93105d313e76df70e6e2ac6a051bba930c18610f82e0",
+      "instructions": [
+        {
+          "id": "writer_agent",
+          "instruction": "Draft a concise product launch blog based exclusively on the provided brief for 'Atlas Notes'. Include a clear title and three short sections targeting small research teams with a practical and direct tone. Cover only offline writing, Markdown export, and shared notebooks. Do not invent any pricing, stats, citations, links, or unmentioned features. Target 180 to 195 words so the text comfortably stays within the 160-220 word window."
+        },
+        {
+          "id": "reviewer_agent",
+          "instruction": "Review and refine the draft from writer_agent. Ensure the final text strictly contains a title and three short sections, adheres to a practical and direct tone, mentions only the brief's features (offline writing, Markdown export, shared notebooks), invents no external facts/stats/pricing/links, and totals strictly between 175 and 195 words (all text and headings included) to safely ensure the total whitespace-separated word count is within the required 160 to 220 word range. Output only the final revised post."
+        }
+      ],
+      "activeStepSeconds": 29.203
+    }
+  ],
+  "usage": {
+    "inputTokens": 15142,
+    "outputTokens": 10083,
+    "costUsd": null,
+    "model": "gemini-3.8-flash"
+  },
+  "memories": [
+    {
+      "kind": "failure",
+      "content": "Cutting too close to the minimum word limit (e.g., aiming right around the threshold) risks deterministic word count evaluation failures due to slight differences in tokenization or whitespace calculation.",
+      "status": "proposed"
+    },
+    {
+      "kind": "strategy",
+      "content": "When editing drafts to adhere to a strict range (160\u2013220 words), target the middle of the range (e.g., ~180-190 words) instead of near 160 words to provide a safety buffer against borderline count discrepancies.",
+      "status": "proposed"
+    },
+    {
+      "kind": "strategy",
+      "content": "Structuring a multi-agent generation pipeline with a writer agent drafting the content and a dedicated editor agent performing final trimming and adherence audits reliably produces text conforming to strict formatting, structural, and length constraints.",
+      "status": "proposed"
+    }
+  ]
+}

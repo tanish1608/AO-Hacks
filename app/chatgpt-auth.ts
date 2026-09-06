@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { authMode, OPEN_USER, verifyIapAssertion } from '@/lib/server/iap';
 
 export type ChatGPTUser = {
   userId: string;
@@ -20,6 +21,30 @@ const CALLBACK_PATH = '/callback';
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
+  // No sign-in: everyone shares one workspace. Request headers are ignored
+  // entirely so a caller cannot pick an identity by sending one.
+  if (authMode() === 'open')
+    return {
+      userId: OPEN_USER.userId,
+      displayName: 'Workspace',
+      email: OPEN_USER.email,
+      fullName: null,
+    };
+  // Behind IAP the oai-* headers are just request input and must never be
+  // trusted: only the signed assertion establishes who is calling.
+  if (authMode() === 'iap') {
+    const user = await verifyIapAssertion(
+      requestHeaders.get('x-goog-iap-jwt-assertion'),
+    );
+    return user
+      ? {
+          userId: user.userId,
+          displayName: user.email,
+          email: user.email,
+          fullName: null,
+        }
+      : null;
+  }
   const userId = requestHeaders.get(USER_ID_HEADER);
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!userId || !email) return null;
@@ -44,7 +69,12 @@ export async function requireChatGPTUser(
 ): Promise<ChatGPTUser> {
   const user = await getChatGPTUser();
   if (user) return user;
-
+  // IAP has already signed the caller in before the request arrives, so a
+  // missing assertion is a misconfiguration, not a prompt to sign in again.
+  if (authMode() === 'iap')
+    throw new Error(
+      'No valid IAP assertion on this request. Check that IAP is enabled and IAP_AUDIENCE matches this service.',
+    );
   redirect(chatGPTSignInPath(returnTo));
 }
 

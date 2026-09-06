@@ -1,0 +1,39 @@
+{
+  "date": "2026-09-06",
+  "scope": "Local integration and deterministic fault injection; not a task-accuracy or learning benchmark",
+  "regressions": {
+    "passed": 43,
+    "failed": 0
+  },
+  "chat_recovery_checks": {
+    "passed": 6,
+    "failed": 0,
+    "real_external_calls": 0
+  },
+  "uploads": {
+    "formats_verified": [
+      "PDF",
+      "DOCX",
+      "TXT"
+    ],
+    "pdf_extracted_characters": 78,
+    "docx_extracted_characters": 129,
+    "txt_extracted_characters": 129,
+    "manual_run_status": "completed",
+    "model_tokens": 2545,
+    "displayed_estimated_model_cost_usd": 0.0031,
+    "verified_output_facts": [
+      "Orion release December 3",
+      "Avery QA deadline November 28",
+      "Support FAQ owner and date unspecified"
+    ],
+    "note": "The manual output also described QA as underway/actively tracked, which was not explicitly established by the fixture; manual runs are not evaluated automatically."
+  },
+  "browser_errors_during_verification": 0,
+  "responsive_width": 466,
+  "live_tasks_retained": [
+    "Presentation Generation, Verification, and Citation Workflow"
+  ],
+  "live_deletions": 0,
+  "deletion_note": "Both live sidebar and D1 inspection already contained only one task."
+}

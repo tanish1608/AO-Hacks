@@ -4380,3 +4380,5 @@ h3 {
 .brand-logo{display:block;object-fit:contain}
 .brand-mark{background:transparent!important;color:inherit;padding:0;overflow:hidden}
 .wb-message.assistant .message-avatar{background:transparent;display:grid;place-items:center}
+/* The mark now fills its own box, so the gap alone sets the spacing. */
+.wb-brand{gap:6px}

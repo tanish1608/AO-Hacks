@@ -1,13 +1,16 @@
 'use client';
+import { Button } from './ui/button';
 import ReactMarkdown from 'react-markdown';
 import { Check, FlaskConical, GitBranch, X, ChevronRight } from 'lucide-react';
 import type { Message, Run } from '@/lib/workbench/types';
 export default function RunConversation({
   message,
   run,
+  onDetails,
 }: {
   message: Message;
   run?: Run;
+  onDetails?: () => void;
 }) {
   const attempt = run?.attempts.find((a) => a.id === message.attemptId);
   const node = attempt?.workflow.nodes.find((n) => n.id === message.nodeId);
@@ -67,6 +70,7 @@ export default function RunConversation({
             (attempt?.traces.reduce((n, t) => n + t.durationMs, 0) ?? 0) / 1000
           ).toFixed(1)}
           s in steps<span>Rubric score; required checks must pass.</span>
+          <Button variant="ghost" size="sm" onClick={onDetails}>View test results</Button>
         </footer>
       </article>
     );
@@ -126,6 +130,7 @@ export default function RunConversation({
         <strong>
           {(
             {
+              test_input: 'Generated test input',
               run_started: 'Testing the workflow',
               reflection: 'What this attempt taught me',
               repair: 'Revising and testing again',

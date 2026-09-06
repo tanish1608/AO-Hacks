@@ -18,6 +18,7 @@ import {
 import { dependencies } from '@/lib/server/workbench-provider';
 import {
   advanceChatRun,
+  announceTest,
   design,
   executePending,
   startRun,
@@ -97,6 +98,13 @@ export async function POST(
         await dependencies(owner, chat),
         chat.selectedApps ?? [],
       );
+      if (b.autoTest === true) {
+        run = await startRun(chat, true, undefined, {
+          mode: 'test',
+          generateInput: true,
+        });
+        announceTest(chat, run);
+      }
     } else if (p.action === 'node') {
       const previous = chat.versions.at(-1);
       if (!previous) throw new HttpError(409, 'Design a workflow first');
@@ -161,20 +169,26 @@ export async function POST(
         m.updatedAt = new Date().toISOString();
       } else throw new HttpError(400, 'Unknown memory operation');
     } else if (p.action === 'run') {
+      if (b.mode !== undefined && !['test', 'manual'].includes(b.mode))
+        throw new HttpError(400, 'Choose test or manual execution.');
+      if (
+        b.mode === 'manual' &&
+        (typeof b.input !== 'string' ||
+          !b.input.trim() ||
+          b.input.length > 12000)
+      )
+        throw new HttpError(400, 'Provide 1–12,000 characters of run input.');
       run = await startRun(
         chat,
         b.useMemory !== false,
         typeof b.versionId === 'string' ? b.versionId : undefined,
+        {
+          mode: b.mode === 'manual' ? 'manual' : 'test',
+          input: b.mode === 'manual' ? b.input : undefined,
+          generateInput: b.mode !== 'manual',
+        },
       );
-      chat.messages.push({
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        kind: 'run_started',
-        runId: run.id,
-        attemptId: run.attempts[0].id,
-        content: `I’ll run the agents and check their output against ${run.rubric.length} criteria. If it needs work, I’ll revise and test again, up to ${run.maxIterations} attempts.`,
-        createdAt: new Date().toISOString(),
-      });
+      if (run.mode !== 'manual') announceTest(chat, run);
     } else {
       if (!run) throw new HttpError(404, 'Run not found');
       if (p.action === 'advance') {

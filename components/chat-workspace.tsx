@@ -6,7 +6,6 @@ import {
   AudioLines,
   Check,
   ChevronRight,
-  Clock3,
   FileText,
   FlaskConical,
   GitBranch,
@@ -14,14 +13,12 @@ import {
   LoaderCircle,
   MemoryStick,
   MessageSquare,
-  Pause,
   Play,
   Plus,
   Plug,
   RotateCcw,
   Settings2,
   ShieldCheck,
-  Square,
   Trash2,
   X,
 } from 'lucide-react';
@@ -30,6 +27,8 @@ import ReactMarkdown from 'react-markdown';
 import WorkflowCanvas from './workflow-canvas';
 import AppPicker, { AppIcon } from './app-picker';
 import RunConversation from './run-conversation';
+import TestResults from './test-results';
+import { emptyUsage } from '@/lib/workbench/types';
 import { APP_CATALOG } from '@/lib/workbench/apps';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -63,7 +62,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from './ui/sidebar';
-import type { AgentNode, Chat, Run, Observation } from '@/lib/workbench/types';
+import type { AgentNode, Chat, Run } from '@/lib/workbench/types';
 type Snapshot = { chat: Omit<Chat, 'sessionId'>; runs: Run[] };
 type ChatRow = { id: string; title: string; updated_at: string };
 type Integrations = {
@@ -122,29 +121,6 @@ const examples = [
       'Build agents that read GitHub project issues and pull requests, identify release blockers and their owners, and prepare a source-linked weekly status report. I will provide the repository.',
   },
 ];
-function TraceItem({ trace }: { trace: Observation }) {
-  return (
-    <details className={`wb-trace ${trace.error ? 'has-error' : ''}`}>
-      <summary>
-        <span className="trace-kind">{trace.kind}</span>
-        <strong>{trace.name}</strong>
-        <span>{(trace.durationMs / 1000).toFixed(1)}s</span>
-        <ChevronRight size={13} />
-      </summary>
-      <div className="trace-body">
-        <small>Observation {trace.id}</small>
-        <p>Input</p>
-        <pre>{trace.input}</pre>
-        <p>Output</p>
-        <pre>{trace.output || trace.error}</pre>
-        <small>
-          {trace.usage.inputTokens + trace.usage.outputTokens} tokens ·
-          LangSmith {trace.langsmith}
-        </small>
-      </div>
-    </details>
-  );
-}
 function TaskButton({
   onClick,
   ...props
@@ -193,7 +169,6 @@ export default function ChatWorkspace() {
     [selectedNode, setSelectedNode] = useState<AgentNode | null>(null),
     [instruction, setInstruction] = useState(''),
     [selectedRunId, setSelectedRunId] = useState(''),
-    [attemptIndex, setAttemptIndex] = useState(-1),
     [auto, setAuto] = useState(false),
     [useMemory, setUseMemory] = useState(true),
     [limitsOpen, setLimitsOpen] = useState(false),
@@ -202,28 +177,30 @@ export default function ChatWorkspace() {
     [limitTools, setLimitTools] = useState(16),
     [selectedApps, setSelectedApps] = useState<string[]>([]),
     [mobileView, setMobileView] = useState('chat'),
-    [showCanvas, setShowCanvas] = useState(true);
+    [showCanvas, setShowCanvas] = useState(true),
+    [designing, setDesigning] = useState(false),
+    [pendingMessage, setPendingMessage] = useState(''),
+    [manualInput, setManualInput] = useState(''),
+    [resultsId, setResultsId] = useState('');
   const [reconciliation, setReconciliation] = useState('');
   const mounted = useRef(true),
     inFlight = useRef(false),
     selectedId = useRef<string | null>(null),
     scrollEnd = useRef<HTMLDivElement>(null);
   const chat = snapshot?.chat;
-  const run =
-    snapshot?.runs.find((r) => r.id === selectedRunId) ?? snapshot?.runs[0];
   const activeRun = snapshot?.runs.find((r) =>
     ['running', 'paused', 'awaiting_approval'].includes(r.status),
   );
-  const attempt =
-    run?.attempts[
-      attemptIndex < 0
-        ? run.attempts.length - 1
-        : Math.min(attemptIndex, run.attempts.length - 1)
-    ];
-  const workflow =
-    tab === 'runs' && attempt
-      ? attempt.workflow
-      : chat?.versions.at(-1)?.workflow;
+  const run =
+    activeRun ??
+    snapshot?.runs.find((r) => r.id === selectedRunId) ??
+    snapshot?.runs[0];
+  const testRuns = snapshot?.runs.filter((r) => r.mode !== 'manual') ?? [];
+  const testRun = testRuns[0];
+  const manualRuns = snapshot?.runs.filter((r) => r.mode === 'manual') ?? [];
+  const manualRun = run?.mode === 'manual' ? run : manualRuns[0];
+  const attempt = manualRun?.attempts.at(-1);
+  const workflow = chat?.versions.at(-1)?.workflow;
   const liveAttempt =
     attempt && JSON.stringify(attempt.workflow) === JSON.stringify(workflow)
       ? attempt
@@ -250,7 +227,9 @@ export default function ChatWorkspace() {
         setSelectedApps(data.chat.selectedApps ?? []);
         setMobileView('chat');
         setSelectedRunId('');
-        setAttemptIndex(-1);
+        setAuto(
+          data.runs.some((r) => r.mode !== 'manual' && r.status === 'running'),
+        );
         setShowCanvas(true);
         setDraft('');
       }
@@ -333,7 +312,7 @@ export default function ChatWorkspace() {
   }, []);
   useEffect(() => {
     scrollEnd.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chat?.messages.length, busy]);
+  }, [chat?.messages.length, busy, pendingMessage]);
   const accept = (data: Snapshot) => {
     if (selectedId.current === data.chat.id) {
       setSnapshot(data);
@@ -366,32 +345,76 @@ export default function ChatWorkspace() {
     }
   }
   async function send() {
-    if (!draft.trim() || busy || activeRun) return;
+    if (!draft.trim() || busy || activeRun || inFlight.current) return;
     const message = draft.trim();
-    if (chat) {
-      const result = await act('message', { message, selectedApps });
-      if (result) {
-        setDraft('');
-        setSelectedRunId('');
-        setShowCanvas(true);
-        setTab('workflow');
-      }
-      return;
-    }
+    inFlight.current = true;
     setBusy(true);
+    setDesigning(true);
+    setPendingMessage(message);
+    setDraft('');
     setError('');
+    setMobileView('chat');
+    let current = snapshot;
     try {
-      const data = await api<Snapshot>('/api/chats', { message, selectedApps });
-      selectedId.current = data.chat.id;
-      rememberTask(data.chat.id);
+      const remembered =
+        selectedId.current ?? new URLSearchParams(location.search).get('task');
+      if (!current && remembered)
+        current = await api<Snapshot>(`/api/chats/${remembered}`);
+      if (!current) {
+        setSnapshot({
+          chat: {
+            id: 'pending',
+            title: message.slice(0, 70),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            revision: 0,
+            messages: [],
+            versions: [],
+            memory: [],
+            settings: { target: 0.85, maxIterations: 3, maxToolCalls: 16 },
+            modelUsage: emptyUsage(),
+          },
+          runs: [],
+        });
+        current = await api<Snapshot>('/api/chats', {
+          message,
+          selectedApps,
+          initialize: true,
+        });
+      }
+      selectedId.current = current.chat.id;
+      rememberTask(current.chat.id);
+      setSnapshot(current);
+      const data = await api<Snapshot>(
+        `/api/chats/${current.chat.id}/message`,
+        {
+          message,
+          selectedApps,
+          revision: current.chat.revision,
+          autoTest: true,
+        },
+      );
       setSnapshot(data);
-      setDraft('');
+      setPendingMessage('');
+      setSelectedRunId(data.runs[0]?.id ?? '');
+      setAuto(true);
       setShowCanvas(true);
+      setTab('workflow');
       void refreshRows();
     } catch (e) {
       setError((e as Error).message);
+      setDraft(message);
+      setPendingMessage('');
+      setAuto(false);
+      if (!current) {
+        setSnapshot(null);
+        selectedId.current = null;
+        rememberTask(null);
+      }
     } finally {
+      inFlight.current = false;
       setBusy(false);
+      setDesigning(false);
     }
   }
   useEffect(() => {
@@ -400,12 +423,22 @@ export default function ChatWorkspace() {
     return () => clearTimeout(timer);
   });
   async function beginRun() {
-    const data = await act('run', { useMemory });
+    const data = await act('run', { useMemory, mode: 'test' });
     if (data) {
       setSelectedRunId(data.runs[0]?.id ?? '');
-      setAttemptIndex(-1);
       setAuto(true);
-      setTab('workflow');
+    }
+  }
+  async function beginManual() {
+    const data = await act('run', {
+      useMemory,
+      mode: 'manual',
+      input: manualInput,
+    });
+    if (data) {
+      setSelectedRunId(data.runs[0]?.id ?? '');
+      setAuto(true);
+      setTab('manual');
     }
   }
   async function connect(slug: string) {
@@ -414,6 +447,7 @@ export default function ChatWorkspace() {
     try {
       const data = await api<{ url: string }>('/api/integrations/connect', {
         toolkit: slug,
+        chatId: chat?.id,
       });
       window.location.assign(data.url);
     } catch (e) {
@@ -430,6 +464,9 @@ export default function ChatWorkspace() {
     selectedId.current = null;
     rememberTask(null);
     setSnapshot(null);
+    setPendingMessage('');
+    setManualInput('');
+    setResultsId('');
     setSelectedApps([]);
     setMobileView('chat');
     setDraft('');
@@ -492,6 +529,84 @@ export default function ChatWorkspace() {
         </Button>
       </div>
     </form>
+  );
+  const actionReview = (
+    <>
+      {run?.pending &&
+        ['awaiting_approval', 'executing', 'unknown'].includes(
+          run.pending.status,
+        ) && (
+          <div className="action-review">
+            <div>
+              <ShieldCheck size={17} />
+              <strong>Review external action</strong>
+            </div>
+            <p>{run.pending.description}</p>
+            <code>{run.pending.tool.slug}</code>
+            <details>
+              <summary>View exact arguments</summary>
+              <pre>{JSON.stringify(run.pending.arguments, null, 2)}</pre>
+            </details>
+            {run.pending.status !== 'awaiting_approval' && (
+              <div className="reconcile-form">
+                <label htmlFor="wb-field-1" className="field-label">
+                  Verify the outcome in the connected app
+                  <Textarea
+                    id="wb-field-1"
+                    value={reconciliation}
+                    onChange={(e) => setReconciliation(e.target.value)}
+                    placeholder="What happened? Include the resource link or result you checked."
+                    maxLength={3000}
+                  />
+                </label>
+                <Button
+                  size="sm"
+                  disabled={busy || reconciliation.trim().length < 10}
+                  onClick={() =>
+                    void act('reconcile', {
+                      pendingId: run.pending?.id,
+                      note: reconciliation,
+                    }).then((data) => {
+                      if (data) setReconciliation('');
+                    })
+                  }
+                >
+                  Record verified outcome & stop
+                </Button>
+              </div>
+            )}
+            <footer>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || run.pending.status !== 'awaiting_approval'}
+                onClick={() => void act('reject')}
+              >
+                Decline
+              </Button>
+              <Button
+                size="sm"
+                disabled={busy || run.pending.status !== 'awaiting_approval'}
+                onClick={() =>
+                  void act('approve', {
+                    pendingId: run.pending?.id,
+                  }).then((data) => {
+                    if (data) setAuto(true);
+                  })
+                }
+              >
+                Approve & execute
+              </Button>
+            </footer>
+            {run.pending.status === 'executing' && (
+              <p>
+                Dispatch was checkpointed. Reconcile in the app if the response
+                was interrupted; it will not automatically replay.
+              </p>
+            )}
+          </div>
+        )}
+    </>
   );
   return (
     <SidebarProvider
@@ -683,6 +798,7 @@ export default function ChatWorkspace() {
                   {chat.messages.map((m) =>
                     m.kind ? (
                       <RunConversation
+                        onDetails={() => setResultsId(m.runId ?? '')}
                         key={m.id}
                         message={m}
                         run={snapshot.runs.find((r) => r.id === m.runId)}
@@ -705,189 +821,146 @@ export default function ChatWorkspace() {
                       </article>
                     ),
                   )}
-                  {busy && (
-                    <div className="working-message">
-                      <LoaderCircle size={14} className="spin" />
-                      {run?.status === 'running'
-                        ? `Working · ${run.phase}`
-                        : 'Updating your workspace…'}
+                  {pendingMessage && (
+                    <article className="wb-message user">
+                      <div className="message-avatar">Y</div>
+                      <div className="message-content">
+                        <small>You</small>
+                        <ReactMarkdown>{pendingMessage}</ReactMarkdown>
+                      </div>
+                    </article>
+                  )}
+                  {designing && (
+                    <div className="design-progress">
+                      <LoaderCircle size={16} className="spin" />
+                      <div>
+                        <strong>Designing your workflow</strong>
+                        <p>
+                          {chat.versions.length
+                            ? 'Updating the agents with your latest instructions. Your task history and memory stay here.'
+                            : 'Identifying the steps, choosing agents, and defining checks for the output.'}
+                        </p>
+                      </div>
                     </div>
                   )}
-                  {run && (
+                  {!designing && busy && run?.mode !== 'manual' && (
+                    <div className="working-message">
+                      <LoaderCircle size={14} className="spin" />
+                      {run?.phase === 'prepare'
+                        ? 'Creating a test input…'
+                        : run?.phase === 'repair'
+                          ? 'Improving the workflow…'
+                          : run?.phase === 'evaluate'
+                            ? 'Checking the output…'
+                            : run?.phase === 'reflect'
+                              ? 'Learning from this attempt…'
+                              : 'Running the next agent…'}
+                    </div>
+                  )}
+                  {testRun && !designing && (
                     <div className="run-chat-card">
                       <div>
-                        <span className={`status-orb ${run.status}`} />
                         <strong>
-                          {run.status === 'completed'
-                            ? 'Run complete'
-                            : run.status.replaceAll('_', ' ')}
+                          {testRun.status === 'completed'
+                            ? 'Test passed'
+                            : testRun.status === 'running'
+                              ? 'Automatic test in progress'
+                              : testRun.status.replaceAll('_', ' ')}
                         </strong>
                         <span>
-                          Attempt {run.attempts.length} / {run.maxIterations}
+                          Attempt {testRun.attempts.length} /{' '}
+                          {testRun.maxIterations}
                         </span>
                       </div>
                       <p>
-                        {run.error ??
-                          (run.status === 'running'
-                            ? auto
-                              ? 'Executing agents and checking their outputs.'
-                              : 'Progress is saved. Continue to execute the next step.'
-                            : 'Review the results above. Tell me what to improve, or test the workflow again.')}
+                        {testRun.error ??
+                          (testRun.status === 'running'
+                            ? 'Checking the output and improving failed steps.'
+                            : 'Tell me what to change, or run this architecture with your own input in the workflow panel.')}
                       </p>
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => {
-                          setTab('runs');
-                          setShowCanvas(true);
-                          setMobileView('workflow');
-                        }}
+                        onClick={() => setResultsId(testRun.id)}
                       >
-                        View run evidence
+                        View test results
                         <ArrowUpRight size={12} />
                       </Button>
                     </div>
                   )}
-                  {run?.pending &&
-                    ['awaiting_approval', 'executing', 'unknown'].includes(
-                      run.pending.status,
-                    ) && (
-                      <div className="action-review">
-                        <div>
-                          <ShieldCheck size={17} />
-                          <strong>Review external action</strong>
-                        </div>
-                        <p>{run.pending.description}</p>
-                        <code>{run.pending.tool.slug}</code>
-                        <details>
-                          <summary>View exact arguments</summary>
-                          <pre>
-                            {JSON.stringify(run.pending.arguments, null, 2)}
-                          </pre>
-                        </details>
-                        {run.pending.status !== 'awaiting_approval' && (
-                          <div className="reconcile-form">
-                            <label htmlFor="wb-field-1" className="field-label">
-                              Verify the outcome in the connected app
-                              <Textarea
-                                id="wb-field-1"
-                                value={reconciliation}
-                                onChange={(e) =>
-                                  setReconciliation(e.target.value)
-                                }
-                                placeholder="What happened? Include the resource link or result you checked."
-                                maxLength={3000}
-                              />
-                            </label>
-                            <Button
-                              size="sm"
-                              disabled={
-                                busy || reconciliation.trim().length < 10
-                              }
-                              onClick={() =>
-                                void act('reconcile', {
-                                  pendingId: run.pending?.id,
-                                  note: reconciliation,
-                                }).then((data) => {
-                                  if (data) setReconciliation('');
-                                })
-                              }
-                            >
-                              Record verified outcome & stop
-                            </Button>
-                          </div>
-                        )}
-                        <footer>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={
-                              busy || run.pending.status !== 'awaiting_approval'
-                            }
-                            onClick={() => void act('reject')}
-                          >
-                            Decline
-                          </Button>
-                          <Button
-                            size="sm"
-                            disabled={
-                              busy || run.pending.status !== 'awaiting_approval'
-                            }
-                            onClick={() =>
-                              void act('approve', {
-                                pendingId: run.pending?.id,
-                              }).then((data) => {
-                                if (data) setAuto(true);
-                              })
-                            }
-                          >
-                            Approve & execute
-                          </Button>
-                        </footer>
-                        {run.pending.status === 'executing' && (
-                          <p>
-                            Dispatch was checkpointed. Reconcile in the app if
-                            the response was interrupted; it will not
-                            automatically replay.
-                          </p>
-                        )}
-                      </div>
-                    )}
+                  {run?.mode !== 'manual' && actionReview}
                   <div ref={scrollEnd} />
                 </div>
                 <div className="chat-bottom">
-                  <div className="chat-test-controls">
-                    <span>
-                      {activeRun
-                        ? `Attempt ${activeRun.attempts.length} of ${activeRun.maxIterations}`
-                        : `${workflow?.nodes.length ?? 0} agents · target ${percent(chat.settings.target)}`}
-                    </span>
-                    {activeRun ? (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={busy}
-                          onClick={() => {
-                            if (activeRun.status === 'paused')
-                              void act('resume', { runId: activeRun.id }).then(
-                                () => setAuto(true),
-                              );
-                            else if (!auto) setAuto(true);
-                            else {
-                              setAuto(false);
-                              void act('pause', { runId: activeRun.id });
-                            }
-                          }}
-                        >
-                          {auto ? 'Pause test' : 'Continue test'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy}
-                          onClick={() => {
-                            setAuto(false);
-                            void act('pause', {
-                              stop: true,
-                              runId: activeRun.id,
-                            });
-                          }}
-                        >
-                          Stop & edit
-                        </Button>
-                      </>
-                    ) : (
+                  {!designing && workflow && (
+                    <div className="chat-test-controls">
                       <Button
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => void beginRun()}
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label="Test limits"
+                        onClick={() => {
+                          setLimitTarget(
+                            Math.round(chat.settings.target * 100),
+                          );
+                          setLimitAttempts(chat.settings.maxIterations);
+                          setLimitTools(chat.settings.maxToolCalls);
+                          setLimitsOpen(true);
+                        }}
                       >
-                        <FlaskConical size={14} />
-                        {run ? 'Test again' : 'Test workflow'}
+                        <Settings2 size={13} />
                       </Button>
-                    )}
-                  </div>
+                      <span>
+                        {activeRun
+                          ? `Attempt ${activeRun.attempts.length} of ${activeRun.maxIterations}`
+                          : `${workflow?.nodes.length ?? 0} agents · target ${percent(chat.settings.target)}`}
+                      </span>
+                      {activeRun && activeRun.mode !== 'manual' ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => {
+                              if (activeRun.status === 'paused')
+                                void act('resume', {
+                                  runId: activeRun.id,
+                                }).then(() => setAuto(true));
+                              else if (!auto) setAuto(true);
+                              else {
+                                setAuto(false);
+                                void act('pause', { runId: activeRun.id });
+                              }
+                            }}
+                          >
+                            {auto ? 'Pause test' : 'Continue test'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={() => {
+                              setAuto(false);
+                              void act('pause', {
+                                stop: true,
+                                runId: activeRun.id,
+                              });
+                            }}
+                          >
+                            Stop & edit
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled={busy || Boolean(activeRun)}
+                          onClick={() => void beginRun()}
+                        >
+                          <FlaskConical size={14} />
+                          {run ? 'Test again' : 'Test workflow'}
+                        </Button>
+                      )}
+                    </div>
+                  )}
                   {activeRun && (
                     <div className="active-hint">
                       {busy
@@ -903,7 +976,7 @@ export default function ChatWorkspace() {
                 </div>
               </section>
             </ResizablePanel>
-            {showCanvas && (
+            {showCanvas && workflow && (
               <>
                 <ResizableHandle withHandle />
                 <ResizablePanel defaultSize="40%" minSize="360px">
@@ -921,73 +994,13 @@ export default function ChatWorkspace() {
                       </div>
                       <div className="workflow-actions">
                         <Button
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label="Run limits"
-                          onClick={() => {
-                            setLimitTarget(
-                              Math.round(chat.settings.target * 100),
-                            );
-                            setLimitAttempts(chat.settings.maxIterations);
-                            setLimitTools(chat.settings.maxToolCalls);
-                            setLimitsOpen(true);
-                          }}
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setTab('manual')}
                         >
-                          <Settings2 size={15} />
+                          <Play size={12} />
+                          Run with my input
                         </Button>
-                        {activeRun ? (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={busy}
-                              onClick={() => {
-                                if (run?.status === 'paused')
-                                  void act('resume').then(() => setAuto(true));
-                                else if (run?.status === 'running' && !auto)
-                                  setAuto(true);
-                                else {
-                                  setAuto(false);
-                                  void act('pause');
-                                }
-                              }}
-                            >
-                              {run?.status === 'paused' || !auto ? (
-                                <Play size={12} />
-                              ) : (
-                                <Pause size={12} />
-                              )}{' '}
-                              {run?.status === 'paused' || !auto
-                                ? 'Continue'
-                                : 'Pause'}
-                            </Button>
-                            <Button
-                              size="icon-sm"
-                              variant="ghost"
-                              disabled={busy}
-                              aria-label="Stop run"
-                              onClick={() => {
-                                setAuto(false);
-                                void act('pause', {
-                                  stop: true,
-                                  runId: activeRun.id,
-                                });
-                              }}
-                            >
-                              <Square size={12} />
-                            </Button>
-                          </>
-                        ) : (
-                          <Button
-                            className="run-button"
-                            size="sm"
-                            disabled={busy}
-                            onClick={() => void beginRun()}
-                          >
-                            <Play size={12} />
-                            Test workflow
-                          </Button>
-                        )}
                       </div>
                     </div>
                     <Tabs
@@ -1005,9 +1018,9 @@ export default function ChatWorkspace() {
                             <MemoryStick size={13} />
                             Memory<span>{chat.memory.length}</span>
                           </TabsTrigger>
-                          <TabsTrigger value="runs">
-                            <Clock3 size={13} />
-                            Runs<span>{snapshot.runs.length}</span>
+                          <TabsTrigger value="manual">
+                            <Play size={13} />
+                            My runs<span>{manualRuns.length}</span>
                           </TabsTrigger>
                         </TabsList>
                         <span className="saved-label">
@@ -1031,50 +1044,6 @@ export default function ChatWorkspace() {
                           </span>
                           <span>Click to inspect · drag to arrange</span>
                         </div>
-                        <div className="quality-strip">
-                          <div>
-                            <small>Rubric score</small>
-                            <strong>
-                              {liveAttempt?.evaluation
-                                ? percent(liveAttempt.evaluation.score)
-                                : '—'}
-                            </strong>
-                          </div>
-                          <div>
-                            <small>Target</small>
-                            <strong>
-                              {percent(
-                                liveAttempt && run
-                                  ? run.target
-                                  : chat.settings.target,
-                              )}
-                            </strong>
-                          </div>
-                          <div>
-                            <small>Tokens</small>
-                            <strong>
-                              {liveAttempt && run
-                                ? (
-                                    run.usage.inputTokens +
-                                    run.usage.outputTokens
-                                  ).toLocaleString()
-                                : '—'}
-                            </strong>
-                          </div>
-                          <div>
-                            <small>Estimated cost</small>
-                            <strong>
-                              {liveAttempt && run
-                                ? money(run.usage.costUsd)
-                                : '—'}
-                            </strong>
-                          </div>
-                        </div>
-                        <p className="score-note">
-                          {liveAttempt
-                            ? 'Rubric score from this version’s test. Open Runs for evidence.'
-                            : 'This workflow version hasn’t been tested yet. Results will appear in chat.'}
-                        </p>
                       </TabsContent>
                       <TabsContent value="memory" className="detail-tab">
                         <div className="section-intro">
@@ -1167,163 +1136,143 @@ export default function ChatWorkspace() {
                           ))
                         )}
                       </TabsContent>
-                      <TabsContent value="runs" className="detail-tab">
+                      <TabsContent
+                        value="manual"
+                        className="detail-tab manual-run-tab"
+                      >
                         <div className="section-intro">
-                          <span className="eyebrow">EXECUTION & EVIDENCE</span>
-                          <h2>Run history</h2>
+                          <h2>Run with your input</h2>
                           <p>
-                            Compare attempts, inspect tool responses, and see
-                            what the next run learned.
+                            Use the current architecture on your own content.
+                            This executes once and keeps the output here.
                           </p>
                         </div>
-                        {!run ? (
-                          <div className="wb-empty">
-                            <Play size={28} />
-                            <strong>Ready when you are</strong>
-                            <p>Run the architecture to measure its outputs.</p>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="run-selectors">
-                              <NativeSelect
-                                aria-label="Choose run"
-                                disabled={Boolean(activeRun)}
-                                value={run.id}
-                                onChange={(e) => {
-                                  setSelectedRunId(e.target.value);
-                                  setAttemptIndex(-1);
-                                  setAuto(false);
+                        <label
+                          className="field-label"
+                          htmlFor="manual-run-input"
+                        >
+                          Input for the first agent
+                          <Textarea
+                            id="manual-run-input"
+                            value={manualInput}
+                            onChange={(e) => setManualInput(e.target.value)}
+                            placeholder="Paste your content, data, or a source URL…"
+                            maxLength={12000}
+                            rows={5}
+                          />
+                        </label>
+                        <div className="manual-controls">
+                          {activeRun?.mode === 'manual' ? (
+                            <>
+                              <Button
+                                disabled={busy}
+                                variant="outline"
+                                onClick={() => {
+                                  if (activeRun.status === 'paused')
+                                    void act('resume', {
+                                      runId: activeRun.id,
+                                    }).then(() => setAuto(true));
+                                  else if (!auto) setAuto(true);
+                                  else {
+                                    setAuto(false);
+                                    void act('pause', { runId: activeRun.id });
+                                  }
                                 }}
                               >
-                                {snapshot.runs.map((r, i) => (
-                                  <NativeSelectOption key={r.id} value={r.id}>
-                                    Run {snapshot.runs.length - i} ·{' '}
-                                    {r.status.replaceAll('_', ' ')}
-                                  </NativeSelectOption>
-                                ))}
-                              </NativeSelect>
-                              <NativeSelect
-                                aria-label="Choose attempt"
-                                value={attempt?.iteration ?? 1}
-                                onChange={(e) =>
-                                  setAttemptIndex(Number(e.target.value) - 1)
-                                }
+                                {auto ? 'Pause' : 'Continue'}
+                              </Button>
+                              <Button
+                                disabled={busy}
+                                variant="ghost"
+                                onClick={() => {
+                                  setAuto(false);
+                                  void act('pause', {
+                                    runId: activeRun.id,
+                                    stop: true,
+                                  });
+                                }}
                               >
-                                {run.attempts.map((a) => (
-                                  <NativeSelectOption
-                                    key={a.id}
-                                    value={a.iteration}
-                                  >
-                                    Attempt {a.iteration}
-                                    {a.evaluation
-                                      ? ` · ${percent(a.evaluation.score)}`
-                                      : ''}
-                                  </NativeSelectOption>
-                                ))}
-                              </NativeSelect>
-                            </div>
-                            <div className="run-facts">
-                              <span>
-                                <strong>
-                                  {(
-                                    run.usage.inputTokens +
-                                    run.usage.outputTokens
-                                  ).toLocaleString()}
-                                </strong>
-                                tokens
-                              </span>
-                              <span>
-                                <strong>{money(run.usage.costUsd)}</strong>model
-                                cost
-                              </span>
-                              <span>
-                                <strong>
-                                  {(
-                                    (attempt?.traces.reduce(
-                                      (n, t) => n + t.durationMs,
-                                      0,
-                                    ) ?? 0) / 1000
-                                  ).toFixed(1)}
-                                  s
-                                </strong>
-                                attempt step time
-                              </span>
-                              <span>
-                                <strong>{run.useMemory ? 'On' : 'Off'}</strong>
-                                memory
-                              </span>
-                            </div>
-                            {attempt?.evaluation && (
-                              <div className="evaluation-card">
-                                <header>
-                                  <strong>Frozen rubric</strong>
-                                  <span
-                                    className={
-                                      attempt.evaluation.verdict === 'pass'
-                                        ? 'pass'
-                                        : 'needs-work'
-                                    }
-                                  >
-                                    {percent(attempt.evaluation.score)} ·{' '}
-                                    {attempt.evaluation.verdict}
-                                  </span>
-                                </header>
-                                <p>{attempt.evaluation.summary}</p>
-                                {run.rubric.map((c) => {
-                                  const check = attempt.evaluation?.checks.find(
-                                    (k) => k.criterionId === c.id,
-                                  );
-                                  return (
-                                    <details
-                                      key={c.id}
-                                      className="rubric-check"
-                                    >
-                                      <summary>
-                                        <span>
-                                          {c.name}
-                                          {c.required && (
-                                            <small>Required</small>
-                                          )}
-                                        </span>
-                                        <strong>
-                                          {percent(check?.score ?? 0)}
-                                        </strong>
-                                      </summary>
-                                      <p>{c.description}</p>
-                                      <p>{check?.rationale}</p>
-                                      <small>
-                                        {check?.verified
-                                          ? 'Evidence references checked'
-                                          : 'Missing evidence'}{' '}
-                                        · weight {c.weight}
-                                      </small>
-                                      {check?.evidenceIds.map((id) => (
-                                        <code key={id}>{id}</code>
-                                      ))}
-                                    </details>
-                                  );
-                                })}
-                                {attempt.evaluation.issues.map((i, n) => (
-                                  <p className="evaluation-issue" key={n}>
-                                    {i}
-                                  </p>
-                                ))}
-                              </div>
-                            )}
-                            <div className="trace-list-title">
-                              Step log{' '}
-                              <span>
-                                {attempt?.traces.length ?? 0} observations
-                              </span>
-                            </div>
-                            {attempt?.traces.map((t) => (
-                              <TraceItem key={t.id} trace={t} />
+                                Stop run
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              disabled={
+                                busy ||
+                                Boolean(activeRun) ||
+                                !manualInput.trim()
+                              }
+                              onClick={() => void beginManual()}
+                            >
+                              <Play size={13} />
+                              Run agents
+                            </Button>
+                          )}
+                        </div>
+                        {activeRun && activeRun.mode !== 'manual' && (
+                          <p className="quiet-text">
+                            The automatic test is running in chat. Finish or
+                            stop it before starting your own run.
+                          </p>
+                        )}
+                        {manualRuns.length > 0 && (
+                          <NativeSelect
+                            aria-label="Manual run history"
+                            value={manualRun?.id ?? ''}
+                            disabled={Boolean(activeRun)}
+                            onChange={(e) => setSelectedRunId(e.target.value)}
+                          >
+                            {manualRuns.map((r, i) => (
+                              <NativeSelectOption value={r.id} key={r.id}>
+                                Run {manualRuns.length - i} ·{' '}
+                                {r.status.replaceAll('_', ' ')}
+                              </NativeSelectOption>
                             ))}
-                            {!attempt?.traces.length && (
-                              <p className="quiet-text">
-                                No completed steps yet.
-                              </p>
+                          </NativeSelect>
+                        )}
+                        {manualRun && (
+                          <>
+                            <div className="manual-status">
+                              <strong>
+                                {manualRun.status.replaceAll('_', ' ')}
+                              </strong>
+                              <span>
+                                {manualRun.usage.inputTokens +
+                                  manualRun.usage.outputTokens}{' '}
+                                tokens · {money(manualRun.usage.costUsd)}
+                              </span>
+                            </div>
+                            {manualRun.error && (
+                              <p role="alert">{manualRun.error}</p>
                             )}
+                            <details className="schema-detail">
+                              <summary>Input used for this run</summary>
+                              <pre>{manualRun.input}</pre>
+                            </details>
+                            {manualRun.attempts.at(-1)?.states.map((state) => (
+                              <details
+                                className="manual-output"
+                                key={state.nodeId}
+                                open={state.status === 'done'}
+                              >
+                                <summary>
+                                  {
+                                    manualRun.attempts[0].workflow.nodes.find(
+                                      (n) => n.id === state.nodeId,
+                                    )?.name
+                                  }{' '}
+                                  · {state.status}
+                                </summary>
+                                <div className="message-content">
+                                  <ReactMarkdown>
+                                    {state.output ||
+                                      state.error ||
+                                      'Waiting for this agent.'}
+                                  </ReactMarkdown>
+                                </div>
+                              </details>
+                            ))}
+                            {run?.mode === 'manual' && actionReview}
                           </>
                         )}
                       </TabsContent>
@@ -1335,6 +1284,14 @@ export default function ChatWorkspace() {
           </ResizablePanelGroup>
         )}
       </main>
+      {resultsId && (
+        <TestResults
+          key={resultsId}
+          initialId={resultsId}
+          runs={testRuns}
+          onClose={() => setResultsId('')}
+        />
+      )}
       <Dialog
         open={Boolean(selectedNode)}
         onOpenChange={(open) => {
@@ -1540,18 +1497,8 @@ export default function ChatWorkspace() {
             {integrations?.connectionError && (
               <p className="evaluation-issue">{integrations.connectionError}</p>
             )}
-            <AppPicker
-              value={selectedApps}
-              onChange={setSelectedApps}
-              disabled={busy || Boolean(activeRun)}
-              onConnections={() => void refreshIntegrations()}
-            />
             <div className="connection-list">
-              {APP_CATALOG.filter(
-                (app) =>
-                  selectedApps.includes(app.slug) ||
-                  integrations?.connections.some((c) => c.slug === app.slug),
-              ).map((app) => {
+              {APP_CATALOG.map((app) => {
                 const c = integrations?.connections.find(
                   (c) => c.slug === app.slug,
                 );

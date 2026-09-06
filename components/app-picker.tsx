@@ -1,5 +1,6 @@
 'use client';
 import Image from 'next/image';
+import { useState } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
 import { APP_CATALOG } from '@/lib/workbench/apps';
 import {
@@ -40,8 +41,9 @@ export default function AppPicker({
   onConnections: () => void;
   connected?: string[];
 }) {
+  const [open, setOpen] = useState(false);
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
         render={
           <Button
@@ -100,7 +102,12 @@ export default function AppPicker({
           </DropdownMenuCheckboxItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onConnections}>
+        <DropdownMenuItem
+          onClick={() => {
+            setOpen(false);
+            queueMicrotask(onConnections);
+          }}
+        >
           Manage connections
           <ChevronDown className="rotate-[-90deg]" size={12} />
         </DropdownMenuItem>

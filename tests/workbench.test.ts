@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createChat,
+  design,
   startRun,
   advanceChatRun,
   executePending,
@@ -568,4 +569,24 @@ void test('long chat test loops retain the original task and latest user instruc
   );
   assert.equal(kept.at(-1)?.id, '99');
   assert.equal(messages.length, 100);
+});
+
+void test('generated tests preserve their fixture across bounded repairs',async()=>{
+ const c=await setup();const delegate=model({failOnce:true});let fixtures=0;const inputs:string[]=[];
+ const m:Model={async json<T>(system:string,input:unknown,schema:Record<string,unknown>){if(system.startsWith('Create one concrete')){fixtures++;return result({input:'Synthetic Atlas Notes brief',explanation:'Generated test fixture'}) as ModelResult<T>;}if(system.startsWith('You are Writer')||system.startsWith('You are Editor'))inputs.push((input as {runInput:string}).runInput);return delegate.json<T>(system,input,schema);}};
+ const outcome=await finish(c,await startRun(c,true,undefined,{mode:'test',generateInput:true}),{model:m,tools:null});
+ assert.equal(fixtures,1);assert.equal(outcome.run.status,'completed');assert.equal(outcome.run.attempts.length,2);assert.ok(inputs.length>=4);assert.ok(inputs.every(s=>s==='Synthetic Atlas Notes brief'));assert.equal(outcome.chat.messages.filter(m=>m.kind==='test_input').length,1);
+});
+void test('manual input executes once without test evaluation, repairs, or chat pollution',async()=>{
+ const c=await setup();const before=structuredClone(c.messages);let calls=0;
+ const m:Model={async json<T>(system:string,input:unknown){assert.ok(!system.startsWith('Reflect')&&!system.startsWith('Repair')&&!system.startsWith('You are an independent'));calls++;return result({action:'finish',output:(input as {runInput:string}).runInput,toolSlug:'',argumentsJson:'{}',reason:''}) as ModelResult<T>;}};
+ const outcome=await finish(c,await startRun(c,true,undefined,{mode:'manual',input:'A completely different user document'}),{model:m,tools:null});
+ assert.equal(calls,2);assert.equal(outcome.run.status,'completed');assert.equal(outcome.run.maxIterations,1);assert.equal(outcome.run.attempts[0].evaluation,null);assert.equal(outcome.run.attempts[0].states.at(-1)?.output,'A completely different user document');assert.deepEqual(outcome.chat.messages,before);assert.deepEqual(outcome.chat.memory,c.memory);assert.equal(outcome.chat.versions.length,c.versions.length);
+ await assert.rejects(()=>startRun(c,true,undefined,{mode:'manual',input:' '}),/Provide input/);
+});
+void test('follow-up architecture edits preserve the chat identity, title, and history',async()=>{
+ const c=await setup();c.title='My original task';
+ const m:Model={async json<T>(){return result({...workflow(),title:'A different proposed title'}) as ModelResult<T>;}};
+ const updated=await design(c,'Make the tone more direct', {model:m,tools:null},[]);
+ assert.equal(updated.id,c.id);assert.equal(updated.title,c.title);assert.equal(updated.versions.length,2);assert.deepEqual(updated.messages[0],c.messages[0]);assert.ok(updated.messages.some(m=>m.content==='Make the tone more direct'));
 });

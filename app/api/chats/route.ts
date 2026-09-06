@@ -32,6 +32,11 @@ export async function POST(request: Request) {
     } catch (e) {
       throw new HttpError(400, (e as Error).message);
     }
+    if (body.initialize === true) {
+      chat.title = body.message.trim().slice(0, 70);
+      await insertChat(chat, owner);
+      return json(await snapshot(chat, owner), 201);
+    }
     const deps = await dependencies(owner, chat);
     const result = await design(
       chat,

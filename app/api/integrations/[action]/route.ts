@@ -17,10 +17,13 @@ export async function POST(
       throw new HttpError(404, 'Unknown integration action');
     if (typeof b.toolkit !== 'string' || !/^[a-z0-9_]{1,60}$/.test(b.toolkit))
       throw new HttpError(400, 'Enter a valid Composio toolkit slug');
+    const returnTo = new URL('/?settings=connections', request.url);
+    if (typeof b.chatId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(b.chatId))
+      returnTo.searchParams.set('task', b.chatId);
     const result = await gateway().authorize(
       await integrationSession(owner),
       b.toolkit,
-      new URL('/?settings=connections', request.url).href,
+      returnTo.href,
     );
     const url = new URL(result.redirect_url);
     if (url.protocol !== 'https:')

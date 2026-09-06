@@ -35,6 +35,7 @@ export interface WorkflowVersion {
 }
 export interface Message {
   kind?:
+    | 'test_input'
     | 'run_started'
     | 'agent_result'
     | 'evaluation'
@@ -146,6 +147,10 @@ export interface PendingAction {
   status: 'awaiting_approval' | 'executing' | 'unknown';
 }
 export interface Run {
+  mode?: 'test' | 'manual';
+  input?: string;
+  inputOrigin?: 'generated' | 'user';
+  inputExplanation?: string;
   id: string;
   chatId: string;
   revision: number;
@@ -159,7 +164,7 @@ export interface Run {
     | 'exhausted'
     | 'blocked'
     | 'failed';
-  phase: 'execute' | 'evaluate' | 'reflect' | 'repair' | 'done';
+  phase: 'prepare' | 'execute' | 'evaluate' | 'reflect' | 'repair' | 'done';
   attempts: Attempt[];
   rubric: Criterion[];
   target: number;

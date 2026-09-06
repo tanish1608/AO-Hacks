@@ -4,7 +4,7 @@ A conversational workspace for designing, running, evaluating, and improving spe
 
 ## Product
 
-- Chat sidebar with isolated task history, workflow versions, and evidence-linked memory.
+- Light, conversation-first workspace with isolated task history, workflow versions, and evidence-linked memory. Task URLs reopen the same conversation after refresh.
 - Editable React Flow agent canvas with dependencies, roles, assigned Composio toolkits, actual schemas, and execution status.
 - Gemini 3.8 Flash generates and modifies workflows. LangGraph advances execution, evaluation, reflection, and targeted repair through persisted checkpoints.
 - Composio v3 sessions discover real tool schemas and manage account authorization. No external application is connected until its owner authorizes it in Settings.
@@ -28,9 +28,9 @@ Open `http://127.0.0.1:3000`. Local sign-in is provided by Sites. Production use
 
 1. Describe a task and its source material or app URLs.
 2. Inspect the generated workflow. Click an agent to edit its instruction; use chat to change structure, tools, or requirements.
-3. Connect required accounts in Settings. Inspect the evaluation criteria and run controls.
-4. Run the workflow. Review proposed external writes as they appear.
-5. Inspect Runs for checks and logs, and Memory for evidence-linked lessons. Run again with memory on or off for an exploratory comparison.
+3. Choose apps from the icon dropdown and connect required accounts in Settings. App selection is applied with your next message.
+4. Click **Test workflow** in chat. Agent outputs, evaluated checks, reflections, repairs, and external-action review appear in the conversation. Failed checks trigger another attempt up to the limit.
+5. Continue chatting to revise the result, or test again. On narrow screens, switch between **Chat** and **Workflow** above the conversation. Use Runs for detailed evidence and Memory for learned lessons.
 
 The current preview advances checkpointed steps while the selected task is open and Continue is enabled. Closing it saves progress; reopen and Continue to resume. A durable background queue is a production deployment requirement, not implemented by keeping a browser alive.
 
@@ -64,4 +64,4 @@ The implementation has authenticated ownership, D1 migrations, revision/lease co
 
 Before enterprise rollout: deploy a durable work queue and watchdog, paginate/archive trace storage beyond the preview's 30-run window, add tenant quotas and stronger billing controls, enforce organization policies and roles, implement credential rotation and connector revocation flows, add SSO/SCIM as required, test account deletion/export, anchor audit retention externally, run load/security testing, and validate real workflows using authorized app accounts. Live Google Docs-to-PPTX export and real cross-domain tool-learning evaluations remain unverified until those accounts and fixtures are available.
 
-Optional WebMCP tools expose task listing and read-only evidence inspection. Registration is feature-detected; browser-side WebMCP discovery was not verified in this session. Browser visual/interaction QA was not performed.
+Optional WebMCP tools expose task listing and read-only evidence inspection. Registration is feature-detected. Browser QA verified WebMCP registration, desktop and 466px layouts, visible graph nodes, chat test outputs and evaluated checks, app icon selection, and connection status. A live Gemini test completed through chat; regression tests verify the failure → reflection → repair → retest event sequence.

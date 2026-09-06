@@ -34,8 +34,16 @@ export interface WorkflowVersion {
   reason: string;
 }
 export interface Message {
-  kind?:'run_started'|'agent_result'|'evaluation'|'reflection'|'repair'|'run_finished';
-  runId?:string;attemptId?:string;nodeId?:string;
+  kind?:
+    | 'run_started'
+    | 'agent_result'
+    | 'evaluation'
+    | 'reflection'
+    | 'repair'
+    | 'run_finished';
+  runId?: string;
+  attemptId?: string;
+  nodeId?: string;
   id: string;
   role: 'user' | 'assistant';
   content: string;
@@ -63,7 +71,7 @@ export interface Chat {
   versions: WorkflowVersion[];
   memory: Memory[];
   settings: { target: number; maxIterations: number; maxToolCalls: number };
-  selectedApps?:string[];
+  selectedApps?: string[];
   sessionId: string | null;
   modelUsage: Usage;
 }

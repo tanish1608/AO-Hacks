@@ -61,6 +61,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarTrigger,
+  useSidebar,
 } from './ui/sidebar';
 import type { AgentNode, Chat, Run, Observation } from '@/lib/workbench/types';
 type Snapshot = { chat: Omit<Chat, 'sessionId'>; runs: Run[] };
@@ -144,6 +145,42 @@ function TraceItem({ trace }: { trace: Observation }) {
     </details>
   );
 }
+function TaskButton({
+  onClick,
+  ...props
+}: React.ComponentProps<typeof SidebarMenuButton>) {
+  const { setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenuButton
+      {...props}
+      onClick={(event) => {
+        setOpenMobile(false);
+        onClick?.(event);
+      }}
+    />
+  );
+}
+function rememberTask(id: string | null) {
+  const url = new URL(window.location.href);
+  if (id) url.searchParams.set('task', id);
+  else url.searchParams.delete('task');
+  window.history.replaceState(null, '', url);
+}
+function TaskActionButton({
+  onClick,
+  ...props
+}: React.ComponentProps<typeof Button>) {
+  const { setOpenMobile } = useSidebar();
+  return (
+    <Button
+      {...props}
+      onClick={(event) => {
+        setOpenMobile(false);
+        onClick?.(event);
+      }}
+    />
+  );
+}
 export default function ChatWorkspace() {
   const [rows, setRows] = useState<ChatRow[]>([]),
     [snapshot, setSnapshot] = useState<Snapshot | null>(null),
@@ -199,6 +236,30 @@ export default function ChatWorkspace() {
     const r = await api<Integrations>('/api/integrations');
     if (mounted.current) setIntegrations(r);
   }, []);
+  const openChat = useCallback(async (id: string) => {
+    if (inFlight.current) return;
+    setAuto(false);
+    selectedId.current = id;
+    setBusy(true);
+    setError('');
+    try {
+      const data = await api<Snapshot>(`/api/chats/${id}`);
+      if (selectedId.current === id) {
+        setSnapshot(data);
+        rememberTask(data.chat.id);
+        setSelectedApps(data.chat.selectedApps ?? []);
+        setMobileView('chat');
+        setSelectedRunId('');
+        setAttemptIndex(-1);
+        setShowCanvas(true);
+        setDraft('');
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
   useEffect(() => {
     mounted.current = true;
     void Promise.allSettled([refreshRows(), refreshIntegrations()]).then(
@@ -210,10 +271,13 @@ export default function ChatWorkspace() {
     const showSettings = () => setSettingsOpen(true);
     if (new URLSearchParams(location.search).has('settings'))
       queueMicrotask(showSettings);
+    const taskId = new URLSearchParams(location.search).get('task');
+    if (taskId && /^[a-zA-Z0-9-]{1,80}$/.test(taskId))
+      queueMicrotask(() => void openChat(taskId));
     return () => {
       mounted.current = false;
     };
-  }, [refreshRows, refreshIntegrations]);
+  }, [refreshRows, refreshIntegrations, openChat]);
   useEffect(() => {
     const context = (
       document as unknown as {
@@ -276,29 +340,6 @@ export default function ChatWorkspace() {
       void refreshRows().catch(() => {});
     }
   };
-  async function openChat(id: string) {
-    if (busy) return;
-    setAuto(false);
-    selectedId.current = id;
-    setBusy(true);
-    setError('');
-    try {
-      const data = await api<Snapshot>(`/api/chats/${id}`);
-      if (selectedId.current === id) {
-        setSnapshot(data);
-        setSelectedApps(data.chat.selectedApps ?? []);
-        setMobileView('chat');
-        setSelectedRunId('');
-        setAttemptIndex(-1);
-        setShowCanvas(true);
-        setDraft('');
-      }
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
   async function act(action: string, extra: Record<string, unknown> = {}) {
     if (!chat || inFlight.current) return;
     inFlight.current = true;
@@ -342,6 +383,7 @@ export default function ChatWorkspace() {
     try {
       const data = await api<Snapshot>('/api/chats', { message, selectedApps });
       selectedId.current = data.chat.id;
+      rememberTask(data.chat.id);
       setSnapshot(data);
       setDraft('');
       setShowCanvas(true);
@@ -386,6 +428,7 @@ export default function ChatWorkspace() {
   const newChat = () => {
     if (busy) return;
     selectedId.current = null;
+    rememberTask(null);
     setSnapshot(null);
     setSelectedApps([]);
     setMobileView('chat');
@@ -421,7 +464,20 @@ export default function ChatWorkspace() {
         rows={2}
       />
       <div className="composer-footer">
-        <AppPicker value={selectedApps} onChange={setSelectedApps} disabled={busy || Boolean(activeRun)} onConnections={() => setSettingsOpen(true)} connected={integrations?.connections.filter(c=>c.connection?.is_active || c.connection?.isActive || c.connection?.connected_account?.status==='ACTIVE').map(c=>c.slug)} />
+        <AppPicker
+          value={selectedApps}
+          onChange={setSelectedApps}
+          disabled={busy || Boolean(activeRun)}
+          onConnections={() => setSettingsOpen(true)}
+          connected={integrations?.connections
+            .filter(
+              (c) =>
+                c.connection?.is_active ||
+                c.connection?.isActive ||
+                c.connection?.connected_account?.status === 'ACTIVE',
+            )
+            .map((c) => c.slug)}
+        />
         <span className="model-label">
           {integrations?.model ?? 'gemini-3.8-flash'}
         </span>
@@ -453,7 +509,7 @@ export default function ChatWorkspace() {
             </span>
             <span className="preview-label">LAB</span>
           </button>
-          <Button
+          <TaskActionButton
             className="new-chat"
             variant="outline"
             onClick={newChat}
@@ -461,23 +517,23 @@ export default function ChatWorkspace() {
           >
             <Plus size={16} />
             New task<span>+</span>
-          </Button>
+          </TaskActionButton>
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupLabel>Your workspace</SidebarGroupLabel>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton onClick={newChat} isActive={!chat}>
+                <TaskButton onClick={newChat} isActive={!chat}>
                   <MessageSquare />
                   <span>Agent studio</span>
-                </SidebarMenuButton>
+                </TaskButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton onClick={() => setSettingsOpen(true)}>
+                <TaskButton onClick={() => setSettingsOpen(true)}>
                   <Plug />
                   <span>Connections</span>
-                </SidebarMenuButton>
+                </TaskButton>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroup>
@@ -488,7 +544,7 @@ export default function ChatWorkspace() {
             <SidebarMenu>
               {rows.map((row) => (
                 <SidebarMenuItem key={row.id}>
-                  <SidebarMenuButton
+                  <TaskButton
                     onClick={() => void openChat(row.id)}
                     isActive={chat?.id === row.id}
                     disabled={busy}
@@ -496,7 +552,7 @@ export default function ChatWorkspace() {
                   >
                     <MessageSquare size={14} />
                     <span>{row.title}</span>
-                  </SidebarMenuButton>
+                  </TaskButton>
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
@@ -516,7 +572,7 @@ export default function ChatWorkspace() {
           </div>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton
+              <TaskButton
                 onClick={() => {
                   setSettingsOpen(true);
                   void refreshIntegrations();
@@ -524,7 +580,7 @@ export default function ChatWorkspace() {
               >
                 <Settings2 />
                 <span>Settings & integrations</span>
-              </SidebarMenuButton>
+              </TaskButton>
             </SidebarMenuItem>
           </SidebarMenu>
           <Link className="lab-link" href="/lab">
@@ -562,7 +618,27 @@ export default function ChatWorkspace() {
             )}
           </div>
         </header>
-        {chat && <nav className="mobile-view-switch" aria-label="Workspace view"><button aria-pressed={mobileView==='chat'} onClick={()=>setMobileView('chat')}><MessageSquare size={14}/>Chat</button><button aria-pressed={mobileView==='workflow'} onClick={()=>{setShowCanvas(true);setMobileView('workflow');}}><GitBranch size={14}/>Workflow <span>{workflow?.nodes.length}</span></button></nav>}
+        {chat && (
+          <nav className="mobile-view-switch" aria-label="Workspace view">
+            <button
+              aria-pressed={mobileView === 'chat'}
+              onClick={() => setMobileView('chat')}
+            >
+              <MessageSquare size={14} />
+              Chat
+            </button>
+            <button
+              aria-pressed={mobileView === 'workflow'}
+              onClick={() => {
+                setShowCanvas(true);
+                setMobileView('workflow');
+              }}
+            >
+              <GitBranch size={14} />
+              Workflow <span>{workflow?.nodes.length}</span>
+            </button>
+          </nav>
+        )}
         {error && (
           <div role="alert" className="wb-error">
             <span>{error}</span>
@@ -575,11 +651,13 @@ export default function ChatWorkspace() {
           <div className="wb-home">
             <div className="home-intro">
               <h1>What are we working on?</h1>
-              <p>Describe a task. We’ll build the workflow, test its output,<br className="desktop-break" /> and work through improvements here with you.</p>
+              <p>
+                Describe a task. We’ll build the workflow, test its output,
+                <br className="desktop-break" /> and work through improvements
+                here with you.
+              </p>
             </div>
-            <div className="home-compose">
-              {composer}
-            </div>
+            <div className="home-compose">{composer}</div>
             <div className="starter-grid">
               {examples.map(({ icon: Icon, ...e }) => (
                 <button key={e.title} onClick={() => setDraft(e.prompt)}>
@@ -602,23 +680,31 @@ export default function ChatWorkspace() {
             >
               <section className="conversation">
                 <div className="chat-messages">
-                  {chat.messages.map((m) => m.kind ? <RunConversation key={m.id} message={m} run={snapshot.runs.find(r=>r.id===m.runId)}/> : (
-                    <article key={m.id} className={`wb-message ${m.role}`}>
-                      <div className="message-avatar">
-                        {m.role === 'assistant' ? (
-                          <GitBranch size={15} />
-                        ) : (
-                          <span>Y</span>
-                        )}
-                      </div>
-                      <div className="message-content">
-                        <small>
-                          {m.role === 'assistant' ? 'Foundry' : 'You'}
-                        </small>
-                        <ReactMarkdown>{m.content}</ReactMarkdown>
-                      </div>
-                    </article>
-                  ))}
+                  {chat.messages.map((m) =>
+                    m.kind ? (
+                      <RunConversation
+                        key={m.id}
+                        message={m}
+                        run={snapshot.runs.find((r) => r.id === m.runId)}
+                      />
+                    ) : (
+                      <article key={m.id} className={`wb-message ${m.role}`}>
+                        <div className="message-avatar">
+                          {m.role === 'assistant' ? (
+                            <GitBranch size={15} />
+                          ) : (
+                            <span>Y</span>
+                          )}
+                        </div>
+                        <div className="message-content">
+                          <small>
+                            {m.role === 'assistant' ? 'Foundry' : 'You'}
+                          </small>
+                          <ReactMarkdown>{m.content}</ReactMarkdown>
+                        </div>
+                      </article>
+                    ),
+                  )}
                   {busy && (
                     <div className="working-message">
                       <LoaderCircle size={14} className="spin" />
@@ -662,102 +748,145 @@ export default function ChatWorkspace() {
                       </Button>
                     </div>
                   )}
-                    {run?.pending &&
-                      ['awaiting_approval', 'executing', 'unknown'].includes(
-                        run.pending.status,
-                      ) && (
-                        <div className="action-review">
-                          <div>
-                            <ShieldCheck size={17} />
-                            <strong>Review external action</strong>
-                          </div>
-                          <p>{run.pending.description}</p>
-                          <code>{run.pending.tool.slug}</code>
-                          <details>
-                            <summary>View exact arguments</summary>
-                            <pre>
-                              {JSON.stringify(run.pending.arguments, null, 2)}
-                            </pre>
-                          </details>
-                          {run.pending.status !== 'awaiting_approval' && (
-                            <div className="reconcile-form">
-                              <label
-                                htmlFor="wb-field-1"
-                                className="field-label"
-                              >
-                                Verify the outcome in the connected app
-                                <Textarea
-                                  id="wb-field-1"
-                                  value={reconciliation}
-                                  onChange={(e) =>
-                                    setReconciliation(e.target.value)
-                                  }
-                                  placeholder="What happened? Include the resource link or result you checked."
-                                  maxLength={3000}
-                                />
-                              </label>
-                              <Button
-                                size="sm"
-                                disabled={
-                                  busy || reconciliation.trim().length < 10
+                  {run?.pending &&
+                    ['awaiting_approval', 'executing', 'unknown'].includes(
+                      run.pending.status,
+                    ) && (
+                      <div className="action-review">
+                        <div>
+                          <ShieldCheck size={17} />
+                          <strong>Review external action</strong>
+                        </div>
+                        <p>{run.pending.description}</p>
+                        <code>{run.pending.tool.slug}</code>
+                        <details>
+                          <summary>View exact arguments</summary>
+                          <pre>
+                            {JSON.stringify(run.pending.arguments, null, 2)}
+                          </pre>
+                        </details>
+                        {run.pending.status !== 'awaiting_approval' && (
+                          <div className="reconcile-form">
+                            <label htmlFor="wb-field-1" className="field-label">
+                              Verify the outcome in the connected app
+                              <Textarea
+                                id="wb-field-1"
+                                value={reconciliation}
+                                onChange={(e) =>
+                                  setReconciliation(e.target.value)
                                 }
-                                onClick={() =>
-                                  void act('reconcile', {
-                                    pendingId: run.pending?.id,
-                                    note: reconciliation,
-                                  }).then((data) => {
-                                    if (data) setReconciliation('');
-                                  })
-                                }
-                              >
-                                Record verified outcome & stop
-                              </Button>
-                            </div>
-                          )}
-                          <footer>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={
-                                busy ||
-                                run.pending.status !== 'awaiting_approval'
-                              }
-                              onClick={() => void act('reject')}
-                            >
-                              Decline
-                            </Button>
+                                placeholder="What happened? Include the resource link or result you checked."
+                                maxLength={3000}
+                              />
+                            </label>
                             <Button
                               size="sm"
                               disabled={
-                                busy ||
-                                run.pending.status !== 'awaiting_approval'
+                                busy || reconciliation.trim().length < 10
                               }
                               onClick={() =>
-                                void act('approve', {
+                                void act('reconcile', {
                                   pendingId: run.pending?.id,
+                                  note: reconciliation,
                                 }).then((data) => {
-                                  if (data) setAuto(true);
+                                  if (data) setReconciliation('');
                                 })
                               }
                             >
-                              Approve & execute
+                              Record verified outcome & stop
                             </Button>
-                          </footer>
-                          {run.pending.status === 'executing' && (
-                            <p>
-                              Dispatch was checkpointed. Reconcile in the app if
-                              the response was interrupted; it will not
-                              automatically replay.
-                            </p>
-                          )}
-                        </div>
-                      )}
+                          </div>
+                        )}
+                        <footer>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={
+                              busy || run.pending.status !== 'awaiting_approval'
+                            }
+                            onClick={() => void act('reject')}
+                          >
+                            Decline
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={
+                              busy || run.pending.status !== 'awaiting_approval'
+                            }
+                            onClick={() =>
+                              void act('approve', {
+                                pendingId: run.pending?.id,
+                              }).then((data) => {
+                                if (data) setAuto(true);
+                              })
+                            }
+                          >
+                            Approve & execute
+                          </Button>
+                        </footer>
+                        {run.pending.status === 'executing' && (
+                          <p>
+                            Dispatch was checkpointed. Reconcile in the app if
+                            the response was interrupted; it will not
+                            automatically replay.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   <div ref={scrollEnd} />
                 </div>
                 <div className="chat-bottom">
                   <div className="chat-test-controls">
-                    <span>{activeRun ? `Attempt ${activeRun.attempts.length} of ${activeRun.maxIterations}` : `${workflow?.nodes.length ?? 0} agents · target ${percent(chat.settings.target)}`}</span>
-                    {activeRun ? <><Button size="sm" variant="outline" disabled={busy} onClick={()=>{if(activeRun.status==='paused')void act('resume',{runId:activeRun.id}).then(()=>setAuto(true));else if(!auto)setAuto(true);else{setAuto(false);void act('pause',{runId:activeRun.id});}}}>{auto?'Pause test':'Continue test'}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setAuto(false);void act('pause',{stop:true,runId:activeRun.id});}}>Stop & edit</Button></> : <Button size="sm" disabled={busy} onClick={()=>void beginRun()}><FlaskConical size={14}/>{run?'Test again':'Test workflow'}</Button>}
+                    <span>
+                      {activeRun
+                        ? `Attempt ${activeRun.attempts.length} of ${activeRun.maxIterations}`
+                        : `${workflow?.nodes.length ?? 0} agents · target ${percent(chat.settings.target)}`}
+                    </span>
+                    {activeRun ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => {
+                            if (activeRun.status === 'paused')
+                              void act('resume', { runId: activeRun.id }).then(
+                                () => setAuto(true),
+                              );
+                            else if (!auto) setAuto(true);
+                            else {
+                              setAuto(false);
+                              void act('pause', { runId: activeRun.id });
+                            }
+                          }}
+                        >
+                          {auto ? 'Pause test' : 'Continue test'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => {
+                            setAuto(false);
+                            void act('pause', {
+                              stop: true,
+                              runId: activeRun.id,
+                            });
+                          }}
+                        >
+                          Stop & edit
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void beginRun()}
+                      >
+                        <FlaskConical size={14} />
+                        {run ? 'Test again' : 'Test workflow'}
+                      </Button>
+                    )}
                   </div>
                   {activeRun && (
                     <div className="active-hint">
@@ -906,21 +1035,25 @@ export default function ChatWorkspace() {
                           <div>
                             <small>Rubric score</small>
                             <strong>
-                              {attempt?.evaluation
-                                ? percent(attempt.evaluation.score)
+                              {liveAttempt?.evaluation
+                                ? percent(liveAttempt.evaluation.score)
                                 : '—'}
                             </strong>
                           </div>
                           <div>
                             <small>Target</small>
                             <strong>
-                              {percent(run?.target ?? chat.settings.target)}
+                              {percent(
+                                liveAttempt && run
+                                  ? run.target
+                                  : chat.settings.target,
+                              )}
                             </strong>
                           </div>
                           <div>
                             <small>Tokens</small>
                             <strong>
-                              {run
+                              {liveAttempt && run
                                 ? (
                                     run.usage.inputTokens +
                                     run.usage.outputTokens
@@ -931,13 +1064,16 @@ export default function ChatWorkspace() {
                           <div>
                             <small>Estimated cost</small>
                             <strong>
-                              {run ? money(run.usage.costUsd) : '—'}
+                              {liveAttempt && run
+                                ? money(run.usage.costUsd)
+                                : '—'}
                             </strong>
                           </div>
                         </div>
                         <p className="score-note">
-                          Rubric judgment, not measured accuracy. Open Runs to
-                          inspect the evidence.
+                          {liveAttempt
+                            ? 'Rubric score from this version’s test. Open Runs for evidence.'
+                            : 'This workflow version hasn’t been tested yet. Results will appear in chat.'}
                         </p>
                       </TabsContent>
                       <TabsContent value="memory" className="detail-tab">
@@ -1398,16 +1534,56 @@ export default function ChatWorkspace() {
             </p>
             {!integrations?.composio && (
               <div className="setup-note">
-                Add <code>COMPOSIO_API_KEY</code> to the server environment,
-                then refresh to connect accounts.
+                Composio isn’t configured for this workspace yet.
               </div>
             )}
             {integrations?.connectionError && (
               <p className="evaluation-issue">{integrations.connectionError}</p>
             )}
-            <AppPicker value={selectedApps} onChange={setSelectedApps} disabled={busy || Boolean(activeRun)} onConnections={()=>void refreshIntegrations()} />
-            <div className="connection-list">{APP_CATALOG.filter(app=>selectedApps.includes(app.slug) || integrations?.connections.some(c=>c.slug===app.slug)).map(app=>{const c=integrations?.connections.find(c=>c.slug===app.slug);const connected=c?.connection?.is_active || c?.connection?.isActive || c?.connection?.connected_account?.status==='ACTIVE';return <div key={app.slug}><AppIcon slug={app.slug}/><span><strong>{app.name}</strong><small>{connected?'Connected':'Account not connected'}</small></span><Button variant="outline" size="sm" disabled={busy || !integrations?.composio} onClick={()=>void connect(app.slug)}>{connected?'Reconnect':'Connect'}<ArrowUpRight size={12}/></Button></div>;})}</div>
-            {!selectedApps.length && !integrations?.connections.length && <p>Choose an app above to connect your account.</p>}
+            <AppPicker
+              value={selectedApps}
+              onChange={setSelectedApps}
+              disabled={busy || Boolean(activeRun)}
+              onConnections={() => void refreshIntegrations()}
+            />
+            <div className="connection-list">
+              {APP_CATALOG.filter(
+                (app) =>
+                  selectedApps.includes(app.slug) ||
+                  integrations?.connections.some((c) => c.slug === app.slug),
+              ).map((app) => {
+                const c = integrations?.connections.find(
+                  (c) => c.slug === app.slug,
+                );
+                const connected =
+                  c?.connection?.is_active ||
+                  c?.connection?.isActive ||
+                  c?.connection?.connected_account?.status === 'ACTIVE';
+                return (
+                  <div key={app.slug}>
+                    <AppIcon slug={app.slug} />
+                    <span>
+                      <strong>{app.name}</strong>
+                      <small>
+                        {connected ? 'Connected' : 'Account not connected'}
+                      </small>
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy || !integrations?.composio}
+                      onClick={() => void connect(app.slug)}
+                    >
+                      {connected ? 'Reconnect' : 'Connect'}
+                      <ArrowUpRight size={12} />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+            {!selectedApps.length && !integrations?.connections.length && (
+              <p>Choose an app above to connect your account.</p>
+            )}
           </div>
           <div className="settings-section">
             <header>
@@ -1428,11 +1604,6 @@ export default function ChatWorkspace() {
               Tokens and durations come from actual calls. Dollar estimates
               require model pricing. App fees are separate.
             </p>
-            <div className="setup-note">
-              Optional server settings: <code>LANGSMITH_API_KEY</code>,{' '}
-              <code>LANGSMITH_PROJECT</code>, and per-million input/output
-              prices. Trace content is excluded by default.
-            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -1,3 +1,5 @@
+import { retainMessages } from '../lib/workbench/messages.ts';
+import { validateAppSelection } from '../lib/workbench/apps.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -488,4 +490,82 @@ void test('invalid tool arguments are fed back without dispatch', async () => {
     s.run.attempts[0].traces.at(-1)!.error!,
     /failed the discovered JSON schema/,
   );
+});
+
+void test('chat records outputs, failed checks, repair, and successful retest in order', async () => {
+  const chat = await setup();
+  const result = await finish(chat, await startRun(chat), {
+    model: model({ failOnce: true }),
+    tools: null,
+  });
+  const events = result.chat.messages.filter((m) => m.kind);
+  assert.deepEqual(
+    events.map((m) => m.kind),
+    [
+      'agent_result',
+      'agent_result',
+      'evaluation',
+      'reflection',
+      'repair',
+      'agent_result',
+      'agent_result',
+      'evaluation',
+      'reflection',
+      'run_finished',
+    ],
+  );
+  assert.equal(new Set(events.map((m) => m.id)).size, events.length);
+  for (const event of events) {
+    assert.equal(event.runId, result.run.id);
+    assert.ok(result.run.attempts.some((a) => a.id === event.attemptId));
+    assert.ok(event.content.trim());
+  }
+  assert.equal(
+    events.filter((m) => m.kind === 'evaluation')[0].attemptId,
+    result.run.attempts[0].id,
+  );
+  assert.equal(
+    events.filter((m) => m.kind === 'evaluation')[1].attemptId,
+    result.run.attempts[1].id,
+  );
+  const before = structuredClone(result.chat.messages);
+  await assert.rejects(
+    () =>
+      advanceChatRun(result.chat, result.run, { model: model(), tools: null }),
+    /Run is not active/,
+  );
+  assert.deepEqual(result.chat.messages, before);
+});
+
+void test('app selection accepts known apps and rejects unsupported or oversized scopes', () => {
+  assert.deepEqual(validateAppSelection(['googledocs', 'github', 'github']), [
+    'googledocs',
+    'github',
+  ]);
+  assert.equal(validateAppSelection(undefined), undefined);
+  assert.throws(
+    () => validateAppSelection(['unknown-toolkit']),
+    /supported apps/,
+  );
+  assert.throws(() => validateAppSelection(Array(9).fill('github')), /eight/);
+  assert.throws(() => validateAppSelection('github'), /supported apps/);
+});
+
+void test('long chat test loops retain the original task and latest user instructions', () => {
+  const messages = Array.from({ length: 100 }, (_, i) => ({
+    id: String(i),
+    role: (i === 0 || i === 8 || i === 25 ? 'user' : 'assistant') as
+      | 'user'
+      | 'assistant',
+    content: 'message ' + i,
+    createdAt: '',
+  }));
+  const kept = retainMessages(messages);
+  assert.ok(kept.length <= 80);
+  assert.deepEqual(
+    kept.filter((m) => m.role === 'user').map((m) => m.id),
+    ['0', '8', '25'],
+  );
+  assert.equal(kept.at(-1)?.id, '99');
+  assert.equal(messages.length, 100);
 });

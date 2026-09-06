@@ -1,7 +1,9 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import {
   ReactFlow,
+  useReactFlow,
+  useNodesInitialized,
   Background,
   Controls,
   MiniMap,
@@ -99,6 +101,37 @@ function generateNodes(workflow: Workflow, attempt?: Attempt): Node<Data>[] {
   });
 }
 
+function FitCanvas({
+  container,
+  graphKey,
+}: {
+  container: RefObject<HTMLDivElement | null>;
+  graphKey: string;
+}) {
+  const initialized = useNodesInitialized();
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    const element = container.current;
+    if (!initialized || !element) return;
+    let frame = 0;
+    const fit = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (element.clientWidth > 0 && element.clientHeight > 0)
+          void fitView({ padding: 0.2, maxZoom: 1 });
+      });
+    };
+    const observer = new ResizeObserver(fit);
+    observer.observe(element);
+    fit();
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [container, initialized, fitView, graphKey]);
+  return null;
+}
+
 export default function WorkflowCanvas({
   workflow,
   attempt,
@@ -108,12 +141,19 @@ export default function WorkflowCanvas({
   attempt?: Attempt;
   onSelect: (node: AgentNode) => void;
 }) {
+  const container = useRef<HTMLDivElement>(null);
   const generated = useMemo(
     () => generateNodes(workflow, attempt),
     [workflow, attempt],
   );
   const [layout, setLayout] = useState<
-    Record<string, Pick<Node<Data>, 'position' | 'selected' | 'measured' | 'width' | 'height'>>
+    Record<
+      string,
+      Pick<
+        Node<Data>,
+        'position' | 'selected' | 'measured' | 'width' | 'height'
+      >
+    >
   >({});
   const nodes = generated.map((n) => ({ ...n, ...layout[n.id] }));
   const edges = workflow.nodes.flatMap((n) =>
@@ -134,38 +174,51 @@ export default function WorkflowCanvas({
     })),
   );
   return (
-    <div className="workflow-graph"><ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      onNodesChange={(changes: NodeChange<Node<Data>>[]) =>
-        setLayout(
-          Object.fromEntries(
-            applyNodeChanges(changes, nodes).map((n) => [
-              n.id,
-              { position: n.position, selected: n.selected, measured:n.measured, width:n.width, height:n.height },
-            ]),
-          ),
-        )
-      }
-      onNodeClick={(_, node) => onSelect(node.data.agent)}
-      nodesConnectable={false}
-      deleteKeyCode={null}
-      fitView
-      fitViewOptions={{ padding: 0.25, maxZoom: 1 }}
-      minZoom={0.25}
-      maxZoom={1.6}
-      colorMode="light"
-      proOptions={{ hideAttribution: true }}
-    >
-      <Background color="#d1d5dc" gap={22} size={1} />
-      <Controls showInteractive={false} />
-      <MiniMap
-        pannable
-        zoomable
-        nodeColor="#c7cfdf"
-        maskColor="rgba(247,248,250,.7)"
-      />
-    </ReactFlow></div>
+    <div className="workflow-graph" ref={container}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodesChange={(changes: NodeChange<Node<Data>>[]) =>
+          setLayout(
+            Object.fromEntries(
+              applyNodeChanges(changes, nodes).map((n) => [
+                n.id,
+                {
+                  position: n.position,
+                  selected: n.selected,
+                  measured: n.measured,
+                  width: n.width,
+                  height: n.height,
+                },
+              ]),
+            ),
+          )
+        }
+        onNodeClick={(_, node) => onSelect(node.data.agent)}
+        nodesConnectable={false}
+        deleteKeyCode={null}
+        fitView
+        fitViewOptions={{ padding: 0.25, maxZoom: 1 }}
+        minZoom={0.25}
+        maxZoom={1.6}
+        colorMode="light"
+      >
+        <FitCanvas
+          container={container}
+          graphKey={workflow.nodes
+            .map((n) => n.id + ':' + n.dependsOn.join(','))
+            .join(';')}
+        />
+        <Background color="#d1d5dc" gap={22} size={1} />
+        <Controls showInteractive={false} />
+        <MiniMap
+          pannable
+          zoomable
+          nodeColor="#c7cfdf"
+          maskColor="rgba(247,248,250,.7)"
+        />
+      </ReactFlow>
+    </div>
   );
 }

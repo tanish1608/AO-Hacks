@@ -1,6 +1,7 @@
 'use client';
 import { Button } from './ui/button';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Check, FlaskConical, GitBranch, X, ChevronRight } from 'lucide-react';
 import type { Message, Run } from '@/lib/workbench/types';
 export default function RunConversation({
@@ -70,7 +71,9 @@ export default function RunConversation({
             (attempt?.traces.reduce((n, t) => n + t.durationMs, 0) ?? 0) / 1000
           ).toFixed(1)}
           s in steps<span>Rubric score; required checks must pass.</span>
-          <Button variant="ghost" size="sm" onClick={onDetails}>View test results</Button>
+          <Button variant="ghost" size="sm" onClick={onDetails}>
+            View test results
+          </Button>
         </footer>
       </article>
     );
@@ -90,7 +93,9 @@ export default function RunConversation({
             <ChevronRight size={13} />
           </summary>
           <div className="message-content">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
           </div>
           {attempt && (
             <details className="inline-log">
@@ -138,7 +143,9 @@ export default function RunConversation({
             } as Record<string, string>
           )[message.kind ?? ''] ?? 'Foundry'}
         </strong>
-        <ReactMarkdown>{message.content}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {message.content}
+        </ReactMarkdown>
       </div>
     </article>
   );

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import WorkflowCanvas from './workflow-canvas';
 import AppPicker, { AppIcon } from './app-picker';
 import RunConversation from './run-conversation';
@@ -181,6 +182,7 @@ export default function ChatWorkspace() {
     [designing, setDesigning] = useState(false),
     [pendingMessage, setPendingMessage] = useState(''),
     [manualInput, setManualInput] = useState(''),
+    [manualStarting, setManualStarting] = useState(false),
     [resultsId, setResultsId] = useState('');
   const [reconciliation, setReconciliation] = useState('');
   const mounted = useRef(true),
@@ -430,15 +432,20 @@ export default function ChatWorkspace() {
     }
   }
   async function beginManual() {
-    const data = await act('run', {
-      useMemory,
-      mode: 'manual',
-      input: manualInput,
-    });
-    if (data) {
-      setSelectedRunId(data.runs[0]?.id ?? '');
-      setAuto(true);
-      setTab('manual');
+    setManualStarting(true);
+    try {
+      const data = await act('run', {
+        useMemory,
+        mode: 'manual',
+        input: manualInput,
+      });
+      if (data) {
+        setSelectedRunId(data.runs[0]?.id ?? '');
+        setAuto(true);
+        setTab('manual');
+      }
+    } finally {
+      setManualStarting(false);
     }
   }
   async function connect(slug: string) {
@@ -720,7 +727,7 @@ export default function ChatWorkspace() {
               <i className={integrations?.gemini ? 'connected' : ''} />
               {integrations?.gemini ? 'Model connected' : 'Model setup needed'}
             </span>
-            {chat && (
+            {chat && workflow && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -733,7 +740,7 @@ export default function ChatWorkspace() {
             )}
           </div>
         </header>
-        {chat && (
+        {chat && workflow && (
           <nav className="mobile-view-switch" aria-label="Workspace view">
             <button
               aria-pressed={mobileView === 'chat'}
@@ -816,7 +823,9 @@ export default function ChatWorkspace() {
                           <small>
                             {m.role === 'assistant' ? 'Foundry' : 'You'}
                           </small>
-                          <ReactMarkdown>{m.content}</ReactMarkdown>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {m.content}
+                          </ReactMarkdown>
                         </div>
                       </article>
                     ),
@@ -826,7 +835,9 @@ export default function ChatWorkspace() {
                       <div className="message-avatar">Y</div>
                       <div className="message-content">
                         <small>You</small>
-                        <ReactMarkdown>{pendingMessage}</ReactMarkdown>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {pendingMessage}
+                        </ReactMarkdown>
                       </div>
                     </article>
                   )}
@@ -843,20 +854,23 @@ export default function ChatWorkspace() {
                       </div>
                     </div>
                   )}
-                  {!designing && busy && run?.mode !== 'manual' && (
-                    <div className="working-message">
-                      <LoaderCircle size={14} className="spin" />
-                      {run?.phase === 'prepare'
-                        ? 'Creating a test input…'
-                        : run?.phase === 'repair'
-                          ? 'Improving the workflow…'
-                          : run?.phase === 'evaluate'
-                            ? 'Checking the output…'
-                            : run?.phase === 'reflect'
-                              ? 'Learning from this attempt…'
-                              : 'Running the next agent…'}
-                    </div>
-                  )}
+                  {!designing &&
+                    !manualStarting &&
+                    busy &&
+                    run?.mode !== 'manual' && (
+                      <div className="working-message">
+                        <LoaderCircle size={14} className="spin" />
+                        {run?.phase === 'prepare'
+                          ? 'Creating a test input…'
+                          : run?.phase === 'repair'
+                            ? 'Improving the workflow…'
+                            : run?.phase === 'evaluate'
+                              ? 'Checking the output…'
+                              : run?.phase === 'reflect'
+                                ? 'Learning from this attempt…'
+                                : 'Running the next agent…'}
+                      </div>
+                    )}
                   {testRun && !designing && (
                     <div className="run-chat-card">
                       <div>
@@ -1264,7 +1278,7 @@ export default function ChatWorkspace() {
                                   · {state.status}
                                 </summary>
                                 <div className="message-content">
-                                  <ReactMarkdown>
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                     {state.output ||
                                       state.error ||
                                       'Waiting for this agent.'}
@@ -1337,7 +1351,7 @@ export default function ChatWorkspace() {
             <details className="schema-detail">
               <summary>Last output</summary>
               <div className="message-content">
-                <ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {
                     attempt.states.find((s) => s.nodeId === selectedNode?.id)!
                       .output

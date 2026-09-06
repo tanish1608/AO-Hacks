@@ -4292,3 +4292,43 @@ h3 {
 .judge-method p {
   margin-top: 6px;
 }
+
+/* Learning: trends, tool knowledge, and the memory ablation. */
+.learning-section{margin-top:26px}
+.trend-grid{display:grid;gap:14px;margin:18px 0 10px}
+.trend-chart{margin:0;border:1px solid #e1e6ee;border-radius:9px;background:#fff;padding:12px 10px 6px}
+.trend-chart figcaption{display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 6px;font-size:10px;color:#98a2b2}
+.trend-chart figcaption strong{font-size:15px;font-weight:450;color:#43516a}
+.trend-chart svg{display:block;width:100%;height:auto}
+.trend-line{fill:none;stroke:#2d3f79;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+.trend-target{stroke:#c3ccdb;stroke-width:1;stroke-dasharray:3 3}
+.trend-dot.with-memory{fill:#2d3f79;stroke:none}
+.trend-dot.without-memory{fill:#fff;stroke:#8a97aa;stroke-width:1.4}
+.quiet-text{font-size:10px;line-height:1.9;color:#98a2b2;margin-top:10px}
+.ab-progress{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:16px 0;padding:12px 14px;border:1px solid #e1e6ee;border-radius:9px;background:#fff;font-size:12px;color:#64758e}
+.experiment-arms{display:flex;gap:5px;margin-right:auto}
+.experiment-arms i{width:11px;height:11px;border-radius:50%;border:1.4px solid #8a97aa}
+.experiment-arms i.with-memory{border-color:#2d3f79}
+.experiment-arms i.done{background:#2d3f79;border-color:#2d3f79}
+.experiment-arms i.done.without-memory{background:#8a97aa;border-color:#8a97aa}
+.experiment-arms i.running{background:#c3ccdb;animation:pulse 1.4s ease-in-out infinite}
+.experiment-arms i.failed{background:#d97070;border-color:#d97070}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.ab-result{margin-top:18px;border:1px solid #e1e6ee;border-radius:9px;background:#fff;padding:16px}
+.ab-verdict{display:block;font-size:13px;font-weight:450;margin-bottom:14px;color:#43516a}
+.ab-verdict.insufficient_data,.ab-verdict.no_measurable_difference{color:#8a97aa}
+.ab-verdict.memory_helped{color:#2d3f79}
+/* A negative result is stated as plainly as a positive one. */
+.ab-verdict.memory_hurt{color:#43516a}
+.paired-bars{margin-bottom:14px}
+.paired-label{display:flex;align-items:baseline;gap:8px;font-size:10px;color:#98a2b2;margin-bottom:6px}
+.paired-label small{font-size:9px;color:#b3bccb}
+.paired-bar{display:grid;grid-template-columns:66px 1fr 74px;align-items:center;gap:9px;margin-top:4px}
+.paired-bar>span{font-size:10px;color:#8a97aa}
+.paired-bar>div{height:7px;border-radius:4px;background:#f0f3f8;overflow:hidden}
+.paired-bar>div>i{display:block;height:100%;border-radius:4px;min-width:2px}
+.paired-bar>div>i.with-memory{background:#2d3f79}
+.paired-bar>div>i.without-memory{background:#b3bccb}
+.paired-bar>strong{font-size:11px;font-weight:450;color:#64758e;text-align:right}
+.memory-status.confirmed{border-color:#2d3f79;color:#2d3f79}
+.memory-status.retired{opacity:.55}

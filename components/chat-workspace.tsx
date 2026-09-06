@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Settings2,
   ShieldCheck,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import DocumentInput from './document-input';
@@ -28,6 +29,10 @@ import AppPicker, { AppIcon } from './app-picker';
 import RunConversation from './run-conversation';
 import TestResults from './test-results';
 import { emptyUsage } from '@/lib/workbench/types';
+import type { RunMetric, ToolKnowledgeRecord } from '@/lib/workbench/types';
+import { ablation, learningTrend, median } from '@/lib/workbench/metrics';
+import { MAX_PAIRS } from '@/lib/workbench/experiment';
+import { PairedBars, TrendLine } from './learning-charts';
 import { APP_CATALOG, appDefinition } from '@/lib/workbench/apps';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -62,7 +67,12 @@ import {
   useSidebar,
 } from './ui/sidebar';
 import type { AgentNode, Chat, Run } from '@/lib/workbench/types';
-type Snapshot = { chat: Omit<Chat, 'sessionId'>; runs: Run[] };
+type Snapshot = {
+  chat: Omit<Chat, 'sessionId'>;
+  runs: Run[];
+  metrics?: RunMetric[];
+  knowledge?: ToolKnowledgeRecord[];
+};
 type ChatRow = { id: string; title: string; updated_at: string };
 type Integrations = {
   model: string;
@@ -212,6 +222,8 @@ export default function ChatWorkspace() {
     [manualStarting, setManualStarting] = useState(false),
     [resultsId, setResultsId] = useState('');
   const [reconciliation, setReconciliation] = useState('');
+  const [abInput, setAbInput] = useState('');
+  const [abPairs, setAbPairs] = useState(2);
   const mounted = useRef(true),
     inFlight = useRef(false),
     selectedId = useRef<string | null>(null),
@@ -453,6 +465,25 @@ export default function ChatWorkspace() {
     const timer = setTimeout(() => void act('advance'), 250);
     return () => clearTimeout(timer);
   });
+  const metrics = snapshot?.metrics ?? [];
+  const knowledge = snapshot?.knowledge ?? [];
+  const trend = learningTrend(metrics);
+  const experiment = chat?.experiment;
+  const armResult = experiment ? ablation(metrics, experiment.id) : null;
+  const finishedArms =
+    experiment?.arms.filter((a) => a.status === 'done' || a.status === 'failed')
+      .length ?? 0;
+  async function beginExperiment() {
+    const data = await act('experiment', {
+      operation: 'start',
+      input: abInput,
+      pairs: abPairs,
+    });
+    if (data) {
+      setSelectedRunId(data.runs[0]?.id ?? '');
+      setAuto(true);
+    }
+  }
   async function beginRun() {
     const data = await act('run', { useMemory, mode: 'test' });
     if (data) {
@@ -1054,6 +1085,10 @@ export default function ChatWorkspace() {
                             Workflow
                           </TabsTrigger>
 
+                          <TabsTrigger value="learning">
+                            <TrendingUp size={13} />
+                            Learning<span>{knowledge.length}</span>
+                          </TabsTrigger>
                           <TabsTrigger value="manual">
                             <Play size={13} />
                             My runs<span>{manualRuns.length}</span>
@@ -1080,6 +1115,279 @@ export default function ChatWorkspace() {
                           </span>
                           <span>Click to inspect · drag to arrange</span>
                         </div>
+                      </TabsContent>
+                      <TabsContent value="learning" className="detail-tab">
+                        <div className="section-intro">
+                          <span className="eyebrow">HOW THIS AGENT IMPROVES</span>
+                          <h2>Learning</h2>
+                          <p>
+                            Task memory stays inside this task. What the agents
+                            observe about each app’s tools is shared across your
+                            tasks, so a later task starts with what an earlier
+                            one worked out.
+                          </p>
+                        </div>
+                        {!metrics.length ? (
+                          <div className="wb-empty">
+                            <TrendingUp size={28} />
+                            <strong>No runs measured yet</strong>
+                            <p>
+                              Test this workflow to start recording rubric
+                              scores, attempts, tokens, and wasted tool calls.
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="run-facts">
+                              <span>
+                                <strong>{metrics.length}</strong>
+                                runs measured
+                              </span>
+                              <span>
+                                <strong>
+                                  {percent(
+                                    metrics.filter((m) => m.passed).length /
+                                      metrics.length,
+                                  )}
+                                </strong>
+                                passed
+                              </span>
+                              <span>
+                                <strong>
+                                  {median(
+                                    metrics
+                                      .filter((m) => m.passed)
+                                      .map((m) => m.attempts),
+                                  ) ?? '—'}
+                                </strong>
+                                median attempts to pass
+                              </span>
+                              <span>
+                                <strong>
+                                  {metrics.some((m) => m.costUsd === null)
+                                    ? 'Unpriced'
+                                    : money(
+                                        metrics.reduce(
+                                          (n, m) => n + (m.costUsd ?? 0),
+                                          0,
+                                        ),
+                                      )}
+                                </strong>
+                                total model cost
+                              </span>
+                            </div>
+                            <div className="trend-grid">
+                              <TrendLine
+                                points={trend}
+                                accessor={(pt) => pt.score}
+                                max={1}
+                                target={chat.settings.target}
+                                label="Rubric score per run"
+                                format={(v) => percent(v)}
+                              />
+                              <TrendLine
+                                points={trend}
+                                accessor={(pt) => pt.toolErrors}
+                                max={Math.max(
+                                  1,
+                                  ...trend.map((pt) => pt.toolErrors),
+                                )}
+                                label="Wasted tool calls per run"
+                                format={(v) => String(v)}
+                              />
+                            </div>
+                            <p className="quiet-text">
+                              A rubric score is a judged result against this
+                              task’s frozen checks, not measured accuracy. Hollow
+                              points are runs with memory switched off.
+                            </p>
+                          </>
+                        )}
+                        <div className="section-intro learning-section">
+                          <h2>Tool knowledge</h2>
+                          <p>
+                            Derived from tool schemas and error signatures only.
+                            A rule stays proposed until a different run observes
+                            it again, and only confirmed rules reach a prompt.
+                          </p>
+                        </div>
+                        {!knowledge.length ? (
+                          <div className="wb-empty">
+                            <Layers3 size={28} />
+                            <strong>Nothing learned yet</strong>
+                            <p>
+                              Connect an app and run a workflow that uses it.
+                              What the tools accept and reject is recorded here.
+                            </p>
+                          </div>
+                        ) : (
+                          knowledge.map((k) => (
+                            <article className="memory-card" key={k.id}>
+                              <div>
+                                <span>{k.toolkit}</span>
+                                <span className={`memory-status ${k.status}`}>
+                                  {k.status}
+                                </span>
+                              </div>
+                              <p>{k.claim}</p>
+                              <small>
+                                observed {k.observations}× · {k.successes}{' '}
+                                succeeded · {k.failures} failed
+                                {k.slug ? ` · ${k.slug}` : ''}
+                              </small>
+                              <details>
+                                <summary>Source evidence</summary>
+                                {k.evidence.map((id) => (
+                                  <code key={id}>{id}</code>
+                                ))}
+                                <span>First seen in run {k.firstRun}</span>
+                              </details>
+                            </article>
+                          ))
+                        )}
+                        <p className="quiet-text">
+                          Shared across your tasks. Task content never is: a
+                          rule that echoes your documents or inputs is dropped
+                          rather than rewritten.
+                        </p>
+                        <div className="section-intro learning-section">
+                          <h2>Does memory actually help?</h2>
+                          <p>
+                            Runs the same input with memory on and off, on a
+                            frozen graph and a frozen memory snapshot. Arms run
+                            one at a time and stay out of the conversation.
+                          </p>
+                        </div>
+                        {experiment && experiment.status === 'running' ? (
+                          <div className="ab-progress">
+                            <span>
+                              Arm {finishedArms + 1} of{' '}
+                              {experiment.arms.length} ·{' '}
+                              {experiment.arms.find(
+                                (a) => a.status === 'running',
+                              )?.useMemory
+                                ? 'memory on'
+                                : 'memory off'}
+                            </span>
+                            <div className="experiment-arms">
+                              {experiment.arms.map((a) => (
+                                <i
+                                  key={a.index}
+                                  className={`${a.status} ${a.useMemory ? 'with-memory' : 'without-memory'}`}
+                                  title={`Arm ${a.index + 1} · ${a.useMemory ? 'memory on' : 'memory off'} · ${a.status}`}
+                                />
+                              ))}
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={busy}
+                              onClick={() => {
+                                setAuto(false);
+                                void act('experiment', { operation: 'cancel' });
+                              }}
+                            >
+                              Cancel experiment
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <label className="field-label" htmlFor="wb-ab-input">
+                              One fixed input, used by every arm
+                              <Textarea
+                                id="wb-ab-input"
+                                value={abInput}
+                                onChange={(e) => setAbInput(e.target.value)}
+                                placeholder="Paste the content every arm should process…"
+                                maxLength={12000}
+                                rows={4}
+                              />
+                            </label>
+                            <div className="manual-controls">
+                              <NativeSelect
+                                aria-label="Pairs"
+                                value={abPairs}
+                                onChange={(e) =>
+                                  setAbPairs(Number(e.target.value))
+                                }
+                              >
+                                {Array.from(
+                                  { length: MAX_PAIRS },
+                                  (_, i) => i + 1,
+                                ).map((n) => (
+                                  <NativeSelectOption key={n} value={n}>
+                                    {n} pair{n > 1 ? 's' : ''} · {n * 2} runs
+                                  </NativeSelectOption>
+                                ))}
+                              </NativeSelect>
+                              <Button
+                                disabled={
+                                  busy || Boolean(activeRun) || !abInput.trim()
+                                }
+                                onClick={() => void beginExperiment()}
+                              >
+                                <FlaskConical size={14} />
+                                Run experiment
+                              </Button>
+                            </div>
+                            <p className="quiet-text">
+                              This spends real model budget: {abPairs * 2} runs,
+                              capped at 2 attempts and 8 tool calls each.
+                            </p>
+                          </>
+                        )}
+                        {experiment && experiment.error && (
+                          <p className="evaluation-issue">{experiment.error}</p>
+                        )}
+                        {armResult && finishedArms > 0 && (
+                          <div className="ab-result">
+                            <strong
+                              className={`ab-verdict ${armResult.verdict}`}
+                            >
+                              {armResult.verdict === 'insufficient_data'
+                                ? `Not enough data to answer yet (${armResult.nPerArm} per arm).`
+                                : armResult.verdict === 'memory_helped'
+                                  ? 'Memory helped on this task.'
+                                  : armResult.verdict === 'memory_hurt'
+                                    ? 'Memory did not help on this task.'
+                                    : 'No measurable difference on this task.'}
+                            </strong>
+                            <PairedBars
+                              label="Pass rate"
+                              memory={armResult.memory.passRate}
+                              control={armResult.control.passRate}
+                              format={(v) => percent(v)}
+                            />
+                            <PairedBars
+                              label="Attempts to finish"
+                              memory={armResult.memory.medianAttempts}
+                              control={armResult.control.medianAttempts}
+                              format={(v) => v.toFixed(1)}
+                              lowerIsBetter
+                            />
+                            <PairedBars
+                              label="Wasted tool calls"
+                              memory={armResult.memory.medianToolErrors}
+                              control={armResult.control.medianToolErrors}
+                              format={(v) => v.toFixed(1)}
+                              lowerIsBetter
+                            />
+                            <PairedBars
+                              label="Tokens"
+                              memory={armResult.memory.medianTokens}
+                              control={armResult.control.medianTokens}
+                              format={(v) => v.toLocaleString()}
+                              lowerIsBetter
+                            />
+                            <p className="quiet-text">
+                              {armResult.nPerArm} run
+                              {armResult.nPerArm === 1 ? '' : 's'} per arm on one
+                              input. Directional only — this is not a
+                              significance test, and a null result is reported as
+                              a null result.
+                            </p>
+                          </div>
+                        )}
                       </TabsContent>
                       <TabsContent
                         value="manual"

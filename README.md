@@ -6,6 +6,8 @@
 
 This report describes the implemented system and experiments preserved in this repository. It is a project technical report, not a peer-reviewed publication.
 
+![Agent Foundry home screen](public/home.JPG)
+
 ### Abstract
 
 Agent Foundry investigates a practical question: can a system turn a user’s goal into a specialized agent workflow, observe its failures, and improve subsequent behavior without changing model weights? The implementation combines a conversational interface, model-generated workflow graphs, a bounded execution and repair controller, evidence-linked evaluation, and two distinct memory stores. Task-specific lessons remain within their originating conversation; a separate owner-scoped store records reusable knowledge about tools. External applications are accessed through Composio, with discovered schemas, connection checks, restricted capabilities, and review before mutations.

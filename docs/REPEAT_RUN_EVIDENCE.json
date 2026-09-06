@@ -1,0 +1,89 @@
+{
+  "scope": "Sequential repeat with the repaired graph and accumulated memory. Both changed since the initial baseline, so this does not isolate the causal effect of memory.",
+  "status": "completed",
+  "attempts": [
+    {
+      "iteration": 1,
+      "score": 0.6,
+      "checks": [
+        {
+          "criterionId": "crit_word_count",
+          "score": 0,
+          "rationale": "Deterministic check: 157 whitespace-separated words in the final output (including headings); expected 160\u2013220.",
+          "evidenceIds": [
+            "32045917-d7ec-4e24-82ca-40d71f655d37"
+          ],
+          "verified": true
+        },
+        {
+          "criterionId": "crit_required_terms",
+          "score": 1,
+          "rationale": "Deterministic contains check passed for the specified literal terms.",
+          "evidenceIds": [
+            "32045917-d7ec-4e24-82ca-40d71f655d37"
+          ],
+          "verified": true
+        },
+        {
+          "criterionId": "crit_brief_adherence",
+          "score": 1,
+          "rationale": "The blog contains a title and exactly three short sections tailored for small research teams with a direct and practical tone. No extra features, pricing, statistics, external tools, or links were invented.",
+          "evidenceIds": [
+            "32045917-d7ec-4e24-82ca-40d71f655d37"
+          ],
+          "verified": true
+        }
+      ],
+      "activeStepSeconds": 9.604,
+      "memoryEntriesRetrieved": 3
+    },
+    {
+      "iteration": 2,
+      "score": 1,
+      "checks": [
+        {
+          "criterionId": "crit_word_count",
+          "score": 1,
+          "rationale": "Deterministic check: 194 whitespace-separated words in the final output (including headings); expected 160\u2013220.",
+          "evidenceIds": [
+            "8dad3525-1289-41bf-9fc5-bf80fc1d50eb"
+          ],
+          "verified": true
+        },
+        {
+          "criterionId": "crit_required_terms",
+          "score": 1,
+          "rationale": "Deterministic contains check passed for the specified literal terms.",
+          "evidenceIds": [
+            "8dad3525-1289-41bf-9fc5-bf80fc1d50eb"
+          ],
+          "verified": true
+        },
+        {
+          "criterionId": "crit_brief_adherence",
+          "score": 1,
+          "rationale": "The post has a title and three short sections, maintains a practical and direct tone tailored to small research teams, and refrains from introducing pricing, statistics, citations, external links, or unmentioned features.",
+          "evidenceIds": [
+            "8dad3525-1289-41bf-9fc5-bf80fc1d50eb"
+          ],
+          "verified": true
+        }
+      ],
+      "activeStepSeconds": 20.74,
+      "memoryEntriesRetrieved": 5
+    }
+  ],
+  "usage": {
+    "inputTokens": 24597,
+    "outputTokens": 8481,
+    "costUsd": 0.05025149999999999,
+    "model": "gemini-3.8-flash"
+  },
+  "memoryStatuses": [
+    "supported",
+    "supported",
+    "supported",
+    "proposed",
+    "proposed"
+  ]
+}

@@ -1,3 +1,4 @@
+import {validateAppSelection} from '@/lib/workbench/apps';
 import {
   authorize,
   failure,
@@ -26,8 +27,9 @@ export async function POST(request: Request) {
     )
       throw new HttpError(400, 'Describe your task in 1–12,000 characters.');
     const chat = createChat(crypto.randomUUID());
+    chat.selectedApps=validateAppSelection(body.selectedApps);
     const deps = await dependencies(owner, chat);
-    const result = await design(chat, body.message, deps, []);
+    const result = await design(chat, body.message, deps, chat.selectedApps??[]);
     await insertChat(result, owner);
     return json(await snapshot(result, owner), 201);
   } catch (e) {

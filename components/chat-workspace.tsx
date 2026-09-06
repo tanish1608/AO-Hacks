@@ -28,6 +28,9 @@ import {
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import WorkflowCanvas from './workflow-canvas';
+import AppPicker, { AppIcon } from './app-picker';
+import RunConversation from './run-conversation';
+import { APP_CATALOG } from '@/lib/workbench/apps';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
@@ -160,7 +163,8 @@ export default function ChatWorkspace() {
     [limitTarget, setLimitTarget] = useState(85),
     [limitAttempts, setLimitAttempts] = useState(3),
     [limitTools, setLimitTools] = useState(16),
-    [toolkit, setToolkit] = useState('googledocs'),
+    [selectedApps, setSelectedApps] = useState<string[]>([]),
+    [mobileView, setMobileView] = useState('chat'),
     [showCanvas, setShowCanvas] = useState(true);
   const [reconciliation, setReconciliation] = useState('');
   const mounted = useRef(true),
@@ -282,6 +286,8 @@ export default function ChatWorkspace() {
       const data = await api<Snapshot>(`/api/chats/${id}`);
       if (selectedId.current === id) {
         setSnapshot(data);
+        setSelectedApps(data.chat.selectedApps ?? []);
+        setMobileView('chat');
         setSelectedRunId('');
         setAttemptIndex(-1);
         setShowCanvas(true);
@@ -322,7 +328,7 @@ export default function ChatWorkspace() {
     if (!draft.trim() || busy || activeRun) return;
     const message = draft.trim();
     if (chat) {
-      const result = await act('message', { message });
+      const result = await act('message', { message, selectedApps });
       if (result) {
         setDraft('');
         setSelectedRunId('');
@@ -334,7 +340,7 @@ export default function ChatWorkspace() {
     setBusy(true);
     setError('');
     try {
-      const data = await api<Snapshot>('/api/chats', { message });
+      const data = await api<Snapshot>('/api/chats', { message, selectedApps });
       selectedId.current = data.chat.id;
       setSnapshot(data);
       setDraft('');
@@ -381,6 +387,8 @@ export default function ChatWorkspace() {
     if (busy) return;
     selectedId.current = null;
     setSnapshot(null);
+    setSelectedApps([]);
+    setMobileView('chat');
     setDraft('');
     setAuto(false);
     setSelectedRunId('');
@@ -410,18 +418,10 @@ export default function ChatWorkspace() {
         }
         aria-label="Task or workflow modification"
         maxLength={12000}
-        disabled={Boolean(activeRun)}
         rows={2}
       />
       <div className="composer-footer">
-        <button
-          type="button"
-          className="composer-tools"
-          onClick={() => setSettingsOpen(true)}
-        >
-          <Plug size={14} />
-          <span>Connect your apps</span>
-        </button>
+        <AppPicker value={selectedApps} onChange={setSelectedApps} disabled={busy || Boolean(activeRun)} onConnections={() => setSettingsOpen(true)} connected={integrations?.connections.filter(c=>c.connection?.is_active || c.connection?.isActive || c.connection?.connected_account?.status==='ACTIVE').map(c=>c.slug)} />
         <span className="model-label">
           {integrations?.model ?? 'gemini-3.8-flash'}
         </span>
@@ -553,6 +553,7 @@ export default function ChatWorkspace() {
               <Button
                 variant="ghost"
                 size="sm"
+                className="desktop-workflow-toggle"
                 onClick={() => setShowCanvas(!showCanvas)}
               >
                 <GitBranch size={14} />
@@ -561,6 +562,7 @@ export default function ChatWorkspace() {
             )}
           </div>
         </header>
+        {chat && <nav className="mobile-view-switch" aria-label="Workspace view"><button aria-pressed={mobileView==='chat'} onClick={()=>setMobileView('chat')}><MessageSquare size={14}/>Chat</button><button aria-pressed={mobileView==='workflow'} onClick={()=>{setShowCanvas(true);setMobileView('workflow');}}><GitBranch size={14}/>Workflow <span>{workflow?.nodes.length}</span></button></nav>}
         {error && (
           <div role="alert" className="wb-error">
             <span>{error}</span>
@@ -572,43 +574,11 @@ export default function ChatWorkspace() {
         {!chat ? (
           <div className="wb-home">
             <div className="home-intro">
-              <span className="home-emblem">
-                <GitBranch size={32} />
-              </span>
-              <p className="eyebrow">THE AGENT ENGINEERING WORKSPACE</p>
-              <h1>
-                A task today.
-                <br />
-                <span>A better agent tomorrow.</span>
-              </h1>
-              <p>
-                Describe the outcome. Build a team of agents that
-                <br className="desktop-break" /> learns how to get you there.
-              </p>
+              <h1>What are we working on?</h1>
+              <p>Describe a task. We’ll build the workflow, test its output,<br className="desktop-break" /> and work through improvements here with you.</p>
             </div>
             <div className="home-compose">
               {composer}
-              <div className="home-caption">
-                <span>
-                  <GitBranch size={12} />
-                  Design
-                </span>
-                <ChevronRight size={10} />
-                <span>
-                  <Play size={12} />
-                  Run
-                </span>
-                <ChevronRight size={10} />
-                <span>
-                  <MemoryStick size={12} />
-                  Learn
-                </span>
-                <ChevronRight size={10} />
-                <span>
-                  <RotateCcw size={12} />
-                  Improve
-                </span>
-              </div>
             </div>
             <div className="starter-grid">
               {examples.map(({ icon: Icon, ...e }) => (
@@ -620,23 +590,19 @@ export default function ChatWorkspace() {
                 </button>
               ))}
             </div>
-            <p className="home-footnote">
-              Your goal, your tools, your criteria. Every improvement leaves
-              evidence.
-            </p>
           </div>
         ) : (
           <ResizablePanelGroup
             orientation="horizontal"
-            className={`wb-panels ${showCanvas ? '' : 'canvas-hidden'}`}
+            className={`wb-panels mobile-${mobileView} ${showCanvas ? '' : 'canvas-hidden'}`}
           >
             <ResizablePanel
-              defaultSize={showCanvas ? '43%' : '100%'}
+              defaultSize={showCanvas ? '60%' : '100%'}
               minSize="320px"
             >
               <section className="conversation">
                 <div className="chat-messages">
-                  {chat.messages.map((m) => (
+                  {chat.messages.map((m) => m.kind ? <RunConversation key={m.id} message={m} run={snapshot.runs.find(r=>r.id===m.runId)}/> : (
                     <article key={m.id} className={`wb-message ${m.role}`}>
                       <div className="message-avatar">
                         {m.role === 'assistant' ? (
@@ -658,7 +624,7 @@ export default function ChatWorkspace() {
                       <LoaderCircle size={14} className="spin" />
                       {run?.status === 'running'
                         ? `Working · ${run.phase}`
-                        : 'Designing your workflow…'}
+                        : 'Updating your workspace…'}
                     </div>
                   )}
                   {run && (
@@ -680,7 +646,7 @@ export default function ChatWorkspace() {
                             ? auto
                               ? 'Executing agents and checking their outputs.'
                               : 'Progress is saved. Continue to execute the next step.'
-                            : 'Inspect the workflow, evaluation, and memory on the right.')}
+                            : 'Review the results above. Tell me what to improve, or test the workflow again.')}
                       </p>
                       <Button
                         size="sm"
@@ -688,6 +654,7 @@ export default function ChatWorkspace() {
                         onClick={() => {
                           setTab('runs');
                           setShowCanvas(true);
+                          setMobileView('workflow');
                         }}
                       >
                         View run evidence
@@ -695,9 +662,103 @@ export default function ChatWorkspace() {
                       </Button>
                     </div>
                   )}
+                    {run?.pending &&
+                      ['awaiting_approval', 'executing', 'unknown'].includes(
+                        run.pending.status,
+                      ) && (
+                        <div className="action-review">
+                          <div>
+                            <ShieldCheck size={17} />
+                            <strong>Review external action</strong>
+                          </div>
+                          <p>{run.pending.description}</p>
+                          <code>{run.pending.tool.slug}</code>
+                          <details>
+                            <summary>View exact arguments</summary>
+                            <pre>
+                              {JSON.stringify(run.pending.arguments, null, 2)}
+                            </pre>
+                          </details>
+                          {run.pending.status !== 'awaiting_approval' && (
+                            <div className="reconcile-form">
+                              <label
+                                htmlFor="wb-field-1"
+                                className="field-label"
+                              >
+                                Verify the outcome in the connected app
+                                <Textarea
+                                  id="wb-field-1"
+                                  value={reconciliation}
+                                  onChange={(e) =>
+                                    setReconciliation(e.target.value)
+                                  }
+                                  placeholder="What happened? Include the resource link or result you checked."
+                                  maxLength={3000}
+                                />
+                              </label>
+                              <Button
+                                size="sm"
+                                disabled={
+                                  busy || reconciliation.trim().length < 10
+                                }
+                                onClick={() =>
+                                  void act('reconcile', {
+                                    pendingId: run.pending?.id,
+                                    note: reconciliation,
+                                  }).then((data) => {
+                                    if (data) setReconciliation('');
+                                  })
+                                }
+                              >
+                                Record verified outcome & stop
+                              </Button>
+                            </div>
+                          )}
+                          <footer>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={
+                                busy ||
+                                run.pending.status !== 'awaiting_approval'
+                              }
+                              onClick={() => void act('reject')}
+                            >
+                              Decline
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={
+                                busy ||
+                                run.pending.status !== 'awaiting_approval'
+                              }
+                              onClick={() =>
+                                void act('approve', {
+                                  pendingId: run.pending?.id,
+                                }).then((data) => {
+                                  if (data) setAuto(true);
+                                })
+                              }
+                            >
+                              Approve & execute
+                            </Button>
+                          </footer>
+                          {run.pending.status === 'executing' && (
+                            <p>
+                              Dispatch was checkpointed. Reconcile in the app if
+                              the response was interrupted; it will not
+                              automatically replay.
+                            </p>
+                          )}
+                        </div>
+                      )}
                   <div ref={scrollEnd} />
                 </div>
                 <div className="chat-bottom">
+                  <div className="chat-test-controls">
+                    <span>{activeRun ? `Attempt ${activeRun.attempts.length} of ${activeRun.maxIterations}` : `${workflow?.nodes.length ?? 0} agents · target ${percent(chat.settings.target)}`}</span>
+                    {activeRun ? <><Button size="sm" variant="outline" disabled={busy} onClick={()=>{if(activeRun.status==='paused')void act('resume',{runId:activeRun.id}).then(()=>setAuto(true));else if(!auto)setAuto(true);else{setAuto(false);void act('pause',{runId:activeRun.id});}}}>{auto?'Pause test':'Continue test'}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setAuto(false);void act('pause',{stop:true,runId:activeRun.id});}}>Stop & edit</Button></> : <Button size="sm" disabled={busy} onClick={()=>void beginRun()}><FlaskConical size={14}/>{run?'Test again':'Test workflow'}</Button>}
+                  </div>
                   {activeRun && (
                     <div className="active-hint">
                       {busy
@@ -716,7 +777,7 @@ export default function ChatWorkspace() {
             {showCanvas && (
               <>
                 <ResizableHandle withHandle />
-                <ResizablePanel defaultSize="57%" minSize="360px">
+                <ResizablePanel defaultSize="40%" minSize="360px">
                   <section className="workflow-panel">
                     <div className="workflow-header">
                       <span className="workflow-icon">
@@ -795,7 +856,7 @@ export default function ChatWorkspace() {
                             onClick={() => void beginRun()}
                           >
                             <Play size={12} />
-                            Run workflow
+                            Test workflow
                           </Button>
                         )}
                       </div>
@@ -882,7 +943,7 @@ export default function ChatWorkspace() {
                       <TabsContent value="memory" className="detail-tab">
                         <div className="section-intro">
                           <span className="eyebrow">LEARNED IN THIS TASK</span>
-                          <h2>Context that compounds.</h2>
+                          <h2>Task memory</h2>
                           <p>
                             Reflections become proposed lessons. Evidence from
                             later runs can support or contradict them.
@@ -973,7 +1034,7 @@ export default function ChatWorkspace() {
                       <TabsContent value="runs" className="detail-tab">
                         <div className="section-intro">
                           <span className="eyebrow">EXECUTION & EVIDENCE</span>
-                          <h2>Every step, accounted for.</h2>
+                          <h2>Run history</h2>
                           <p>
                             Compare attempts, inspect tool responses, and see
                             what the next run learned.
@@ -1131,96 +1192,6 @@ export default function ChatWorkspace() {
                         )}
                       </TabsContent>
                     </Tabs>
-                    {run?.pending &&
-                      ['awaiting_approval', 'executing', 'unknown'].includes(
-                        run.pending.status,
-                      ) && (
-                        <div className="action-review">
-                          <div>
-                            <ShieldCheck size={17} />
-                            <strong>Review external action</strong>
-                          </div>
-                          <p>{run.pending.description}</p>
-                          <code>{run.pending.tool.slug}</code>
-                          <details>
-                            <summary>View exact arguments</summary>
-                            <pre>
-                              {JSON.stringify(run.pending.arguments, null, 2)}
-                            </pre>
-                          </details>
-                          {run.pending.status !== 'awaiting_approval' && (
-                            <div className="reconcile-form">
-                              <label
-                                htmlFor="wb-field-1"
-                                className="field-label"
-                              >
-                                Verify the outcome in the connected app
-                                <Textarea
-                                  id="wb-field-1"
-                                  value={reconciliation}
-                                  onChange={(e) =>
-                                    setReconciliation(e.target.value)
-                                  }
-                                  placeholder="What happened? Include the resource link or result you checked."
-                                  maxLength={3000}
-                                />
-                              </label>
-                              <Button
-                                size="sm"
-                                disabled={
-                                  busy || reconciliation.trim().length < 10
-                                }
-                                onClick={() =>
-                                  void act('reconcile', {
-                                    pendingId: run.pending?.id,
-                                    note: reconciliation,
-                                  }).then((data) => {
-                                    if (data) setReconciliation('');
-                                  })
-                                }
-                              >
-                                Record verified outcome & stop
-                              </Button>
-                            </div>
-                          )}
-                          <footer>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={
-                                busy ||
-                                run.pending.status !== 'awaiting_approval'
-                              }
-                              onClick={() => void act('reject')}
-                            >
-                              Decline
-                            </Button>
-                            <Button
-                              size="sm"
-                              disabled={
-                                busy ||
-                                run.pending.status !== 'awaiting_approval'
-                              }
-                              onClick={() =>
-                                void act('approve', {
-                                  pendingId: run.pending?.id,
-                                }).then((data) => {
-                                  if (data) setAuto(true);
-                                })
-                              }
-                            >
-                              Approve & execute
-                            </Button>
-                          </footer>
-                          {run.pending.status === 'executing' && (
-                            <p>
-                              Dispatch was checkpointed. Reconcile in the app if
-                              the response was interrupted; it will not
-                              automatically replay.
-                            </p>
-                          )}
-                        </div>
-                      )}
                   </section>
                 </ResizablePanel>
               </>
@@ -1434,57 +1405,9 @@ export default function ChatWorkspace() {
             {integrations?.connectionError && (
               <p className="evaluation-issue">{integrations.connectionError}</p>
             )}
-            <div className="app-connection-grid">
-              {[
-                { slug: 'googledocs', name: 'Google Docs', letter: 'D' },
-                { slug: 'googleslides', name: 'Google Slides', letter: 'S' },
-                { slug: 'googledrive', name: 'Google Drive', letter: 'G' },
-                { slug: 'notion', name: 'Notion', letter: 'N' },
-                { slug: 'github', name: 'GitHub', letter: 'G' },
-                { slug: 'slack', name: 'Slack', letter: '#' },
-              ].map((app) => {
-                const c = integrations?.connections.find(
-                  (c) => c.slug === app.slug,
-                );
-                const connected =
-                  c?.connection?.is_active ||
-                  c?.connection?.isActive ||
-                  c?.connection?.connected_account?.status === 'ACTIVE';
-                return (
-                  <div key={app.slug}>
-                    <span className={`app-logo ${app.slug}`}>{app.letter}</span>
-                    <strong>{app.name}</strong>
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      disabled={busy || !integrations?.composio}
-                      onClick={() => void connect(app.slug)}
-                    >
-                      {connected ? 'Reconnect' : 'Connect'}
-                      <ArrowUpRight size={11} />
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-            <label htmlFor="wb-field-7" className="field-label">
-              Another Composio toolkit
-              <div className="custom-toolkit">
-                <Input
-                  id="wb-field-7"
-                  value={toolkit}
-                  onChange={(e) => setToolkit(e.target.value)}
-                  placeholder="Toolkit slug"
-                />
-                <Button
-                  variant="outline"
-                  disabled={busy || !integrations?.composio}
-                  onClick={() => void connect(toolkit)}
-                >
-                  Connect
-                </Button>
-              </div>
-            </label>
+            <AppPicker value={selectedApps} onChange={setSelectedApps} disabled={busy || Boolean(activeRun)} onConnections={()=>void refreshIntegrations()} />
+            <div className="connection-list">{APP_CATALOG.filter(app=>selectedApps.includes(app.slug) || integrations?.connections.some(c=>c.slug===app.slug)).map(app=>{const c=integrations?.connections.find(c=>c.slug===app.slug);const connected=c?.connection?.is_active || c?.connection?.isActive || c?.connection?.connected_account?.status==='ACTIVE';return <div key={app.slug}><AppIcon slug={app.slug}/><span><strong>{app.name}</strong><small>{connected?'Connected':'Account not connected'}</small></span><Button variant="outline" size="sm" disabled={busy || !integrations?.composio} onClick={()=>void connect(app.slug)}>{connected?'Reconnect':'Connect'}<ArrowUpRight size={12}/></Button></div>;})}</div>
+            {!selectedApps.length && !integrations?.connections.length && <p>Choose an app above to connect your account.</p>}
           </div>
           <div className="settings-section">
             <header>

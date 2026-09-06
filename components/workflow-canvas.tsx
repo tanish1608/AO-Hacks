@@ -12,7 +12,8 @@ import {
   type NodeProps,
   type NodeChange,
 } from '@xyflow/react';
-import { Bot, Check, LoaderCircle, Plug, TriangleAlert } from 'lucide-react';
+import { AppIcon } from './app-picker';
+import { Bot, Check, LoaderCircle, TriangleAlert } from 'lucide-react';
 import type { AgentNode, Attempt, Workflow } from '@/lib/workbench/types';
 import '@xyflow/react/dist/style.css';
 type Data = {
@@ -46,7 +47,7 @@ function AgentCard({ data, selected }: NodeProps<Node<Data>>) {
         {data.agent.toolkits.length ? (
           data.agent.toolkits.map((t) => (
             <span key={t}>
-              <Plug size={10} />
+              <AppIcon slug={t} size={14} />
               {t}
             </span>
           ))
@@ -112,7 +113,7 @@ export default function WorkflowCanvas({
     [workflow, attempt],
   );
   const [layout, setLayout] = useState<
-    Record<string, { position: { x: number; y: number }; selected?: boolean }>
+    Record<string, Pick<Node<Data>, 'position' | 'selected' | 'measured' | 'width' | 'height'>>
   >({});
   const nodes = generated.map((n) => ({ ...n, ...layout[n.id] }));
   const edges = workflow.nodes.flatMap((n) =>
@@ -126,14 +127,14 @@ export default function WorkflowCanvas({
       style: {
         stroke:
           attempt?.states.find((s) => s.nodeId === id)?.status === 'done'
-            ? '#79c5ac'
-            : '#4a4d52',
+            ? '#5066bb'
+            : '#a8afb9',
         strokeWidth: 1.6,
       },
     })),
   );
   return (
-    <ReactFlow
+    <div className="workflow-graph"><ReactFlow
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
@@ -142,7 +143,7 @@ export default function WorkflowCanvas({
           Object.fromEntries(
             applyNodeChanges(changes, nodes).map((n) => [
               n.id,
-              { position: n.position, selected: n.selected },
+              { position: n.position, selected: n.selected, measured:n.measured, width:n.width, height:n.height },
             ]),
           ),
         )
@@ -154,17 +155,17 @@ export default function WorkflowCanvas({
       fitViewOptions={{ padding: 0.25, maxZoom: 1 }}
       minZoom={0.25}
       maxZoom={1.6}
-      colorMode="dark"
+      colorMode="light"
       proOptions={{ hideAttribution: true }}
     >
-      <Background color="#3b3e42" gap={22} size={1} />
+      <Background color="#d1d5dc" gap={22} size={1} />
       <Controls showInteractive={false} />
       <MiniMap
         pannable
         zoomable
-        nodeColor="#343a3c"
-        maskColor="rgba(20,23,25,.7)"
+        nodeColor="#c7cfdf"
+        maskColor="rgba(247,248,250,.7)"
       />
-    </ReactFlow>
+    </ReactFlow></div>
   );
 }

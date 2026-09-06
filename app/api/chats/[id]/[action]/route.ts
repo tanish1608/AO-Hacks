@@ -1,3 +1,4 @@
+import {validateAppSelection} from '@/lib/workbench/apps';
 import {
   authorize,
   failure,
@@ -83,7 +84,8 @@ export async function POST(
         b.message.length > 12000
       )
         throw new HttpError(400, 'Message must be 1–12,000 characters.');
-      chat = await design(chat, b.message, await dependencies(owner, chat), []);
+      if(b.selectedApps!==undefined)chat.selectedApps=validateAppSelection(b.selectedApps);
+      chat = await design(chat, b.message, await dependencies(owner, chat), chat.selectedApps??[]);
     } else if (p.action === 'node') {
       const previous = chat.versions.at(-1);
       if (!previous) throw new HttpError(409, 'Design a workflow first');
@@ -153,6 +155,7 @@ export async function POST(
         b.useMemory !== false,
         typeof b.versionId === 'string' ? b.versionId : undefined,
       );
+      chat.messages.push({id:crypto.randomUUID(),role:'assistant',kind:'run_started',runId:run.id,attemptId:run.attempts[0].id,content:`I’ll run the agents and check their output against ${run.rubric.length} criteria. If it needs work, I’ll revise and test again, up to ${run.maxIterations} attempts.`,createdAt:new Date().toISOString()});
     } else {
       if (!run) throw new HttpError(404, 'Run not found');
       if (p.action === 'advance') {

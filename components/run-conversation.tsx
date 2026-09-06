@@ -48,6 +48,11 @@ export default function RunConversation({
                   <span>
                     {c.name}
                     {c.required && <small>Required</small>}
+                    <small>
+                      {!c.assertion || c.assertion.kind === 'rubric'
+                        ? 'LLM judge'
+                        : 'Deterministic'}
+                    </small>
                   </span>
                   <b>{Math.round((check?.score ?? 0) * 100)}%</b>
                 </summary>
@@ -70,7 +75,10 @@ export default function RunConversation({
           {(
             (attempt?.traces.reduce((n, t) => n + t.durationMs, 0) ?? 0) / 1000
           ).toFixed(1)}
-          s in steps<span>Rubric score; required checks must pass.</span>
+          s in steps
+          <span>
+            LLM judge + evidence checks · rubric score, not measured accuracy.
+          </span>
           <Button variant="ghost" size="sm" onClick={onDetails}>
             View test results
           </Button>

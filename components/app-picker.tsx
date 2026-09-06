@@ -2,7 +2,12 @@
 import Image from 'next/image';
 import { useState } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
-import { APP_CATALOG } from '@/lib/workbench/apps';
+import {
+  APP_CATALOG,
+  ALL_APPS,
+  FINANCE_APPS,
+  appDefinition,
+} from '@/lib/workbench/apps';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -13,7 +18,7 @@ import {
 } from './ui/dropdown-menu';
 import { Button } from './ui/button';
 export function AppIcon({ slug, size = 20 }: { slug: string; size?: number }) {
-  const app = APP_CATALOG.find((a) => a.slug === slug);
+  const app = appDefinition(slug);
   return app ? (
     <Image
       unoptimized
@@ -41,7 +46,23 @@ export default function AppPicker({
   onConnections: () => void;
   connected?: string[];
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false),
+    [category, setCategory] = useState('featured'),
+    [query, setQuery] = useState(''),
+    [limit, setLimit] = useState(50);
+  const choices = (
+    category === 'featured'
+      ? APP_CATALOG
+      : category === 'finance'
+        ? APP_CATALOG.filter((a) => FINANCE_APPS.includes(a.slug))
+        : ALL_APPS
+  ).filter(
+    (a) =>
+      !query ||
+      (a.name + ' ' + a.description)
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+  );
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
@@ -75,10 +96,43 @@ export default function AppPicker({
           <strong>Apps for this task</strong>
           <span>Choose what your agents can use.</span>
         </div>
-        {APP_CATALOG.map((app) => (
+        <div className="picker-browse">
+          <label>
+            Browse apps
+            <select
+              aria-label="App category"
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setLimit(50);
+                setQuery('');
+              }}
+            >
+              <option value="featured">Featured</option>
+              <option value="finance">Finance & accounting</option>
+              <option value="all">
+                All {ALL_APPS.length.toLocaleString()} apps
+              </option>
+            </select>
+          </label>
+          {category === 'all' && (
+            <input
+              aria-label="Filter apps"
+              placeholder="Filter by app name…"
+              value={query}
+              onKeyDown={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setLimit(50);
+              }}
+            />
+          )}
+        </div>
+        {choices.slice(0, limit).map((app) => (
           <DropdownMenuCheckboxItem
             key={app.slug}
             checked={value.includes(app.slug)}
+            disabled={!value.includes(app.slug) && value.length >= 8}
             onCheckedChange={(checked) =>
               onChange(
                 checked
@@ -94,13 +148,22 @@ export default function AppPicker({
               <strong>{app.name}</strong>
               <small>{app.description}</small>
             </span>
-            {connected.includes(app.slug) && (
+            {(connected.includes(app.slug) || app.noAuth) && (
               <span className="picker-connected" title="Connected">
-                <small>Linked</small>
+                <small>{app.noAuth ? 'Ready' : 'Linked'}</small>
               </span>
             )}
           </DropdownMenuCheckboxItem>
         ))}
+        {choices.length > limit && (
+          <DropdownMenuItem
+            closeOnClick={false}
+            onClick={() => setLimit(limit + 50)}
+          >
+            Show more ({choices.length - limit} remaining)
+          </DropdownMenuItem>
+        )}
+        {!choices.length && <p className="picker-heading">No matching apps.</p>}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => {

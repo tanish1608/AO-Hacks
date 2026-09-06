@@ -109,6 +109,32 @@ export default function TestResults({
                 attempt step time
               </span>
             </div>
+            <div className="judge-method">
+              <strong>Evaluation method</strong>
+              <p>
+                LLM judge:{' '}
+                {attempt.traces.find((t) => t.kind === 'evaluation')?.usage
+                  .model || 'Not recorded yet'}
+                . A separate evaluator call scores the frozen rubric using run
+                evidence.
+              </p>
+              <p>
+                {
+                  run.rubric.filter(
+                    (c) => !c.assertion || c.assertion.kind === 'rubric',
+                  ).length
+                }{' '}
+                model-judged checks ·{' '}
+                {
+                  run.rubric.filter(
+                    (c) => c.assertion && c.assertion.kind !== 'rubric',
+                  ).length
+                }{' '}
+                deterministic checks. Deterministic results override the judge;
+                required checks and evidence gates must pass. This is a rubric
+                score, not measured task accuracy.
+              </p>
+            </div>
             <details className="schema-detail">
               <summary>
                 Test input ·{' '}
@@ -142,6 +168,14 @@ export default function TestResults({
                       {check ? Math.round(check.score * 100) + '%' : 'Pending'}
                     </strong>
                   </summary>
+                  <p>
+                    <strong>
+                      {!c.assertion || c.assertion.kind === 'rubric'
+                        ? 'LLM-judged'
+                        : 'Deterministic: ' +
+                          c.assertion.kind.replaceAll('_', ' ')}
+                    </strong>
+                  </p>
                   <p>{c.description}</p>
                   <p>{check?.rationale}</p>
                   <small>

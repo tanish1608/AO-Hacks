@@ -11,18 +11,14 @@ import {
   GitBranch,
   Layers3,
   LoaderCircle,
-  MemoryStick,
   MessageSquare,
   Play,
   Plus,
-  Plug,
   RotateCcw,
   Settings2,
   ShieldCheck,
-  Trash2,
   X,
 } from 'lucide-react';
-import Link from 'next/link';
 import DocumentInput from './document-input';
 import { combineRunInput, type InputDocument } from '@/lib/workbench/documents';
 import ReactMarkdown from 'react-markdown';
@@ -32,7 +28,7 @@ import AppPicker, { AppIcon } from './app-picker';
 import RunConversation from './run-conversation';
 import TestResults from './test-results';
 import { emptyUsage } from '@/lib/workbench/types';
-import { APP_CATALOG } from '@/lib/workbench/apps';
+import { APP_CATALOG, appDefinition } from '@/lib/workbench/apps';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
@@ -104,6 +100,7 @@ const money = (x: number | null) =>
 const examples = [
   {
     icon: FileText,
+    apps: ['googledocs', 'googleslides', 'googledrive'],
     title: 'Turn a document into a deck',
     description: 'Read, structure, design, and verify.',
     prompt:
@@ -111,6 +108,7 @@ const examples = [
   },
   {
     icon: Layers3,
+    apps: ['googledocs', 'composio_search'],
     title: 'Build my editorial team',
     description: 'Research, draft, and fact-check a blog.',
     prompt:
@@ -118,10 +116,35 @@ const examples = [
   },
   {
     icon: GitBranch,
+    apps: ['github'],
     title: 'Make sense of project activity',
     description: 'Connect issues, context, and decisions.',
     prompt:
       'Build agents that read GitHub project issues and pull requests, identify release blockers and their owners, and prepare a source-linked weekly status report. I will provide the repository.',
+  },
+  {
+    icon: Layers3,
+    title: 'Reconcile the books',
+    description: 'Match bank exports to ledger entries.',
+    apps: ['quickbooks', 'googlesheets'],
+    prompt:
+      'Build a CFO reconciliation workflow. Read my QuickBooks ledger and a bank transaction export I will provide. Match by amount, currency, date, and reference; distinguish duplicates, timing differences, and unmatched items. Produce a reconciliation table with source IDs and an exception queue for human review. Verify opening balance plus movements equals closing balance. Never invent transactions or post adjusting entries without approval.',
+  },
+  {
+    icon: FileText,
+    title: 'Review invoices before payment',
+    description: 'Find duplicates and route exceptions.',
+    apps: ['xero', 'gmail', 'googledrive'],
+    prompt:
+      'Build an accounts-payable review workflow using Xero invoices and invoice documents I will supply. Check supplier, invoice number, currency, totals, tax, duplicate invoices, and purchase-order evidence where available. Produce a source-linked review register and route missing evidence or mismatches for human review. Do not approve or initiate payments. Ask for company, reporting period, and source references when I run it.',
+  },
+  {
+    icon: GitBranch,
+    title: 'Prepare a weekly cash report',
+    description: 'Explain cash movements and upcoming bills.',
+    apps: ['zoho_books', 'googlesheets'],
+    prompt:
+      'Build a treasury reporting workflow using Zoho Books and my cash spreadsheet. Read current balances, receivables, and payables for the date range I provide. Reconcile opening cash plus receipts minus payments to closing cash by currency, flag missing or stale data, and prepare a weekly cash report with an exceptions list and source references. Keep forecast assumptions separate from observed balances; do not move funds.',
   },
 ];
 function TaskButton({
@@ -660,12 +683,6 @@ export default function ChatWorkspace() {
                   <span>Agent studio</span>
                 </TaskButton>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <TaskButton onClick={() => setSettingsOpen(true)}>
-                  <Plug />
-                  <span>Connections</span>
-                </TaskButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroup>
           <SidebarGroup className="chat-list">
@@ -695,12 +712,6 @@ export default function ChatWorkspace() {
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter>
-          <div className="workspace-note">
-            <ShieldCheck size={15} />
-            <div>
-              Private workspace<small>Memory stays within each task</small>
-            </div>
-          </div>
           <SidebarMenu>
             <SidebarMenuItem>
               <TaskButton
@@ -714,11 +725,6 @@ export default function ChatWorkspace() {
               </TaskButton>
             </SidebarMenuItem>
           </SidebarMenu>
-          <Link className="lab-link" href="/lab">
-            <FlaskConical size={13} />
-            Evaluation lab
-            <ArrowUpRight size={12} />
-          </Link>
         </SidebarFooter>
       </Sidebar>
       <main className="wb-main">
@@ -732,10 +738,6 @@ export default function ChatWorkspace() {
             </>
           )}
           <div className="header-right">
-            <span className="connection-indicator">
-              <i className={integrations?.gemini ? 'connected' : ''} />
-              {integrations?.gemini ? 'Model connected' : 'Model setup needed'}
-            </span>
             {chat && workflow && (
               <Button
                 variant="ghost"
@@ -791,7 +793,13 @@ export default function ChatWorkspace() {
             <div className="home-compose">{composer}</div>
             <div className="starter-grid">
               {examples.map(({ icon: Icon, ...e }) => (
-                <button key={e.title} onClick={() => setDraft(e.prompt)}>
+                <button
+                  key={e.title}
+                  onClick={() => {
+                    setDraft(e.prompt);
+                    setSelectedApps(e.apps);
+                  }}
+                >
                   <Icon size={19} />
                   <strong>{e.title}</strong>
                   <p>{e.description}</p>
@@ -1045,10 +1053,7 @@ export default function ChatWorkspace() {
                             <GitBranch size={13} />
                             Workflow
                           </TabsTrigger>
-                          <TabsTrigger value="memory">
-                            <MemoryStick size={13} />
-                            Memory<span>{chat.memory.length}</span>
-                          </TabsTrigger>
+
                           <TabsTrigger value="manual">
                             <Play size={13} />
                             My runs<span>{manualRuns.length}</span>
@@ -1075,97 +1080,6 @@ export default function ChatWorkspace() {
                           </span>
                           <span>Click to inspect · drag to arrange</span>
                         </div>
-                      </TabsContent>
-                      <TabsContent value="memory" className="detail-tab">
-                        <div className="section-intro">
-                          <span className="eyebrow">LEARNED IN THIS TASK</span>
-                          <h2>Task memory</h2>
-                          <p>
-                            Reflections become proposed lessons. Evidence from
-                            later runs can support or contradict them.
-                          </p>
-                        </div>
-                        {!chat.memory.length ? (
-                          <div className="wb-empty">
-                            <MemoryStick size={28} />
-                            <strong>No lessons yet</strong>
-                            <p>
-                              Run this workflow to build memory from actual
-                              execution evidence.
-                            </p>
-                          </div>
-                        ) : (
-                          chat.memory.map((m) => (
-                            <article className="memory-card" key={m.id}>
-                              <div>
-                                <span>{m.kind.replace('_', ' ')}</span>
-                                <span className={`memory-status ${m.status}`}>
-                                  {m.status.replace('_', ' ')}
-                                </span>
-                              </div>
-                              <p>{m.content}</p>
-                              <small>
-                                {m.evidence.length} evidence links · used{' '}
-                                {m.usedCount} times · supported in{' '}
-                                {m.supportedRuns.length} later runs
-                              </small>
-                              <details>
-                                <summary>Source evidence</summary>
-                                {m.evidence.map((id) => (
-                                  <code key={id}>{id}</code>
-                                ))}
-                                <span>Run {m.sourceRun}</span>
-                              </details>
-                              <div className="memory-actions">
-                                <Button
-                                  size="xs"
-                                  variant="ghost"
-                                  disabled={
-                                    busy ||
-                                    Boolean(activeRun) ||
-                                    m.status === 'user_confirmed'
-                                  }
-                                  onClick={() =>
-                                    void act('memory', {
-                                      memoryId: m.id,
-                                      operation: 'confirm',
-                                    })
-                                  }
-                                >
-                                  <Check size={12} />
-                                  Confirm
-                                </Button>
-                                <Button
-                                  size="xs"
-                                  variant="ghost"
-                                  disabled={busy || Boolean(activeRun)}
-                                  onClick={() =>
-                                    void act('memory', {
-                                      memoryId: m.id,
-                                      operation: 'reject',
-                                    })
-                                  }
-                                >
-                                  Reject
-                                </Button>
-                                <Button
-                                  size="icon-xs"
-                                  variant="ghost"
-                                  disabled={busy || Boolean(activeRun)}
-                                  aria-label="Delete memory"
-                                  onClick={() =>
-                                    void act('memory', {
-                                      memoryId: m.id,
-                                      operation: 'delete',
-                                    })
-                                  }
-                                >
-                                  <Trash2 size={12} />
-                                </Button>
-                              </div>
-                            </article>
-                          ))
-                        )}
                       </TabsContent>
                       <TabsContent
                         value="manual"
@@ -1563,38 +1477,58 @@ export default function ChatWorkspace() {
               <p className="evaluation-issue">{integrations.connectionError}</p>
             )}
             <div className="connection-list">
-              {APP_CATALOG.map((app) => {
-                const c = integrations?.connections.find(
-                  (c) => c.slug === app.slug,
-                );
-                const connected =
-                  c?.connection?.is_active ||
-                  c?.connection?.isActive ||
-                  c?.connection?.connected_account?.status === 'ACTIVE';
-                return (
-                  <div key={app.slug}>
-                    <AppIcon slug={app.slug} />
-                    <span>
-                      <strong>{app.name}</strong>
-                      <small>
-                        {connected ? 'Connected' : 'Account not connected'}
-                      </small>
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={busy || !integrations?.composio}
-                      onClick={() => void connect(app.slug)}
-                    >
-                      {connected ? 'Reconnect' : 'Connect'}
-                      <ArrowUpRight size={12} />
-                    </Button>
-                  </div>
-                );
-              })}
+              {[
+                ...new Set([
+                  ...APP_CATALOG.map((a) => a.slug),
+                  ...selectedApps,
+                  ...(integrations?.connections.map((c) => c.slug) ?? []),
+                ]),
+              ]
+                .map((slug) => appDefinition(slug))
+                .filter((a): a is NonNullable<typeof a> => Boolean(a))
+                .map((app) => {
+                  const c = integrations?.connections.find(
+                    (c) => c.slug === app.slug,
+                  );
+                  const connected =
+                    c?.connection?.is_active ||
+                    c?.connection?.isActive ||
+                    c?.connection?.connected_account?.status === 'ACTIVE';
+                  return (
+                    <div key={app.slug}>
+                      <AppIcon slug={app.slug} />
+                      <span>
+                        <strong>{app.name}</strong>
+                        <small>
+                          {app.noAuth
+                            ? 'Ready · no account needed'
+                            : connected
+                              ? 'Connected'
+                              : 'Account not connected'}
+                        </small>
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy || !integrations?.composio || app.noAuth}
+                        onClick={() => void connect(app.slug)}
+                      >
+                        {app.noAuth
+                          ? 'Ready'
+                          : connected
+                            ? 'Reconnect'
+                            : 'Connect'}
+                        <ArrowUpRight size={12} />
+                      </Button>
+                    </div>
+                  );
+                })}
             </div>
             {!selectedApps.length && !integrations?.connections.length && (
-              <p>Choose an app above to connect your account.</p>
+              <p>
+                Browse all apps from Add apps in the chat composer. Selected
+                apps appear here for connection.
+              </p>
             )}
           </div>
           <div className="settings-section">

@@ -36,6 +36,16 @@ The current preview advances checkpointed steps while the selected task is open 
 
 **Recovery checks** posts six deterministic fault-injection checks in the task chat. During actual tests, bounded transient read retries and stagnation stops also appear in chat, with logs in detailed results. See [the applied research and scope](docs/RECOVERY_RESEARCH.md).
 
+## App catalog, search, and CFO starters
+
+The icon picker has Featured, Finance & accounting, and All apps views. The complete 1,505-toolkit catalog was retrieved from Composio on September 6, 2026; the app displays that bundled snapshot, not a live guarantee of account availability. `node --experimental-strip-types scripts/sync-app-catalog.ts` refreshes it from authenticated, paginated Composio metadata. Selected apps still require authorization where applicable, with at most eight apps per task.
+
+Web Search uses Composio's public Exa/Tavily/DuckDuckGo tools without a separate account connection. Google Search (SerpApi) exposes actual Google search tools and requires the owner's SerpApi connection. These providers are labeled separately. Public search aliases map only a reviewed list of search/read slugs; privileged Composio meta operations remain excluded.
+
+CFO starter prompts cover ledger reconciliation, invoice review, and weekly cash reporting. They select relevant apps and prepare a draft prompt; they do not invent company data or initiate payments. Finance app account authorization and end-to-end finance runs remain operator steps, not completed demo evidence.
+
+The LLM judge already ran as a separate evaluation call. Chat now labels model-judged versus deterministic checks, and detailed results show the judge model, evidence gates, and deterministic overrides. Memory remains active internally but is no longer a workflow-panel tab.
+
 ## Verification
 
 ```sh

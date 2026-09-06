@@ -4254,3 +4254,41 @@ h3 {
   font-size: 12px;
   margin: 8px 0;
 }
+
+.picker-browse {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.picker-browse label {
+  font-size: 10px;
+  color: #757b85;
+  display: block;
+}
+.picker-browse select,
+.picker-browse input {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #e0e3e8;
+  border-radius: 6px;
+  margin: 4px 0;
+  background: white;
+  color: #323840;
+  font-size: 12px;
+}
+.judge-method {
+  border: 1px solid #e0e3e8;
+  background: #f8f9fb;
+  border-radius: 8px;
+  padding: 14px;
+  margin: 12px 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #606b7b;
+}
+.judge-method strong {
+  color: #384250;
+}
+.judge-method p {
+  margin-top: 6px;
+}

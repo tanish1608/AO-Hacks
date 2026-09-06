@@ -1,0 +1,57 @@
+{
+  "date": "2026-09-06",
+  "catalog": {
+    "source": "Composio v3 /toolkits",
+    "pages": 2,
+    "count": 1505,
+    "refresh": "scripts/sync-app-catalog.ts"
+  },
+  "google_search": {
+    "toolkit": "serpapi",
+    "discovered": [
+      "SERPAPI_GOOGLE_LIGHT_SEARCH",
+      "SERPAPI_SEARCH",
+      "SERPAPI_GET_AVAILABLE_LOCATION_OPTIONS_FOR_GOOGLE_SEARCHES",
+      "SERPAPI_GOOGLE_DOMAINS_LIST"
+    ],
+    "account_connected": false,
+    "execution_verified": false
+  },
+  "web_search": {
+    "toolkit": "composio_search",
+    "standalone_execution_verified": true,
+    "official_result": "https://datatracker.ietf.org/doc/html/rfc9110",
+    "live_workflow": {
+      "status": "completed",
+      "attempts": 1,
+      "score": 1,
+      "score_type": "rubric, not calibrated accuracy",
+      "model_judged_checks": 1,
+      "deterministic_checks": 1,
+      "judge": "gemini-3.8-flash",
+      "tool_trace": "FOUNDRY_WEB_RESEARCH",
+      "reported_tokens": 15668,
+      "displayed_estimated_model_cost_usd": 0.0171
+    }
+  },
+  "regression_tests_passed": 46,
+  "browser_errors": 0,
+  "finance_apps": [
+    "quickbooks",
+    "xero",
+    "zoho_books",
+    "netsuite",
+    "stripe",
+    "brex",
+    "ramp"
+  ],
+  "finance_account_execution_verified": false,
+  "ui_verified": [
+    "navigation cleanup",
+    "workflow memory tab removed",
+    "CFO starter app selection",
+    "all-catalog filtering",
+    "Airtable selection visible in Settings",
+    "LLM judge metadata and per-check methods"
+  ]
+}

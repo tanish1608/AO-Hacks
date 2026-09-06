@@ -1,3 +1,8 @@
+import {
+  SEARCH_TOOLS,
+  searchAlias,
+  allowedDiscoveredSlug,
+} from './search-tools.ts';
 import { isReviewedRead } from './tool-policy.ts';
 import type { DiscoveredTool } from './types.ts';
 type Schema = {
@@ -59,7 +64,7 @@ export class ComposioGateway {
       .filter(
         (t) =>
           allowed.includes(t.toolkit.toLowerCase()) &&
-          !t.tool_slug.startsWith('COMPOSIO_'),
+          allowedDiscoveredSlug(t.tool_slug, t.toolkit),
       )
       .slice(0, 5);
     const partial = selected
@@ -84,14 +89,16 @@ export class ComposioGateway {
         (t) =>
           t.input_schema &&
           allowed.includes(t.toolkit.toLowerCase()) &&
-          !t.tool_slug.startsWith('COMPOSIO_'),
+          allowedDiscoveredSlug(t.tool_slug, t.toolkit),
       )
       .map((t) => ({
-        slug: t.tool_slug,
+        slug: searchAlias(t.tool_slug, t.toolkit) ?? t.tool_slug,
         toolkit: t.toolkit.toLowerCase(),
         description: t.description.slice(0, 1500),
         schema: t.input_schema!,
-        readOnly: isReviewedRead(t.tool_slug, t.annotations?.readOnlyHint),
+        readOnly:
+          Boolean(searchAlias(t.tool_slug, t.toolkit)) ||
+          isReviewedRead(t.tool_slug, t.annotations?.readOnlyHint),
         connected: data.toolkit_connection_statuses?.find(
           (c) => c.toolkit.toLowerCase() === t.toolkit.toLowerCase(),
         )?.has_active_connection,
@@ -103,7 +110,7 @@ export class ComposioGateway {
       error?: string;
       successful?: boolean;
     }>(`/tool_router/session/${encodeURIComponent(sessionId)}/execute`, {
-      tool_slug: slug,
+      tool_slug: SEARCH_TOOLS[slug] ?? slug,
       arguments: args,
     });
     if (result.error || result.successful === false)

@@ -2,7 +2,11 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-.demo-input-actions a { font-size:12px; text-decoration:underline; text-underline-offset:3px; }
+.finance-demo-gallery { width: min(100%, 760px); margin: 24px auto; text-align: left; }
+.finance-demo-gallery h2 { font-size: 15px; font-weight: 600; }
+.finance-demo-gallery > p { color: #64748b; font-size: 13px; margin: 6px 0 12px; }
+.finance-demo-gallery > div { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid #e5e7eb; flex-wrap:wrap; }
+.finance-demo-gallery a, .demo-input-actions a { font-size:12px; text-decoration:underline; text-underline-offset:3px; }
 .demo-input-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:12px 0; }
 .connection-prompt { border:1px solid #dbe2ec; padding:16px; border-radius:12px; background:#f8fafc; }
 .connection-prompt h3 { font-weight:600; }
@@ -4341,14 +4345,18 @@ h3 {
 .memory-status.confirmed{border-color:#2d3f79;color:#2d3f79}
 .memory-status.retired{opacity:.55}
 
-/* Starter rows: one click target per task, with its sample workbook alongside. */
-.starter-row{display:flex;align-items:center;gap:10px;border-bottom:1px solid #eceef1}
-.starter-row>button{flex:1;min-width:0;border-bottom:0!important}
-.starter-row>a{flex-shrink:0;font-size:11px;color:#98a2b2;text-decoration:none;padding:4px 9px;border:1px solid #e5e9ef;border-radius:6px;white-space:nowrap}
-.starter-row>a:hover{color:#43516a;border-color:#c3ccdb}
-@media (max-width:560px){.starter-row>a{display:none}}
-/* Settings reuses the composer picker's browse controls. */
-.settings-browse{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 4px}
-.settings-browse label{display:flex;align-items:center;gap:7px;font-size:11px;color:#98a2b2}
-.settings-browse select,.settings-browse input{font-size:11px;padding:5px 8px;border:1px solid #e1e6ee;border-radius:6px;background:#fff;color:#43516a}
-.settings-browse input{flex:1;min-width:130px}
+/* Full app catalog, reached from Settings. */
+.see-all-apps{display:flex;align-items:center;gap:8px;width:100%;margin-top:10px;padding:11px 12px;border:1px solid #e1e6ee;border-radius:8px;background:#fff;font-size:12px;color:#64758e;cursor:pointer}
+.see-all-apps:hover{border-color:#c3ccdb;color:#43516a}
+.see-all-apps>svg:last-child{margin-left:auto}
+.all-apps-dialog{max-width:720px!important;width:calc(100vw - 32px)!important}
+.all-apps-search{width:100%;margin:4px 0 14px;padding:9px 11px;border:1px solid #e1e6ee;border-radius:8px;background:#fff;font-size:12px;color:#43516a}
+.all-apps-search:focus{outline:none;border-color:#c3ccdb}
+.all-apps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;max-height:52dvh;overflow:auto;padding:2px;scrollbar-gutter:stable}
+.all-apps-grid>button{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:9px;padding:15px 8px 12px;border:1px solid #e5e9ef;border-radius:9px;background:#fff;cursor:pointer;min-height:96px}
+.all-apps-grid>button:hover:not(:disabled){border-color:#c3ccdb;background:#fafbfc}
+.all-apps-grid>button:disabled{cursor:default;opacity:.75}
+.all-apps-grid>button.connected{border-color:#2d3f79}
+.all-apps-grid>button>span{font-size:10px;line-height:1.45;color:#64758e;text-align:center;overflow-wrap:anywhere}
+.all-apps-grid>button>i{position:absolute;top:6px;right:6px;display:flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#2d3f79;color:#fff}
+.all-apps-empty{font-size:12px;color:#98a2b2;padding:18px 2px}

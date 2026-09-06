@@ -34,12 +34,7 @@ import type { RunMetric, ToolKnowledgeRecord } from '@/lib/workbench/types';
 import { ablation, learningTrend, median } from '@/lib/workbench/metrics';
 import { MAX_PAIRS } from '@/lib/workbench/experiment';
 import { PairedBars, TrendLine } from './learning-charts';
-import {
-  ALL_APPS,
-  APP_CATALOG,
-  FINANCE_APPS,
-  appDefinition,
-} from '@/lib/workbench/apps';
+import { ALL_APPS, APP_CATALOG, appDefinition } from '@/lib/workbench/apps';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
@@ -115,11 +110,34 @@ const money = (x: number | null) =>
   x === null ? 'Unpriced' : `$${x.toFixed(4)}`;
 const examples = [
   {
+    icon: FileText,
+    apps: ['googledocs', 'googleslides', 'googledrive'],
+    title: 'Turn a document into a deck',
+    description: 'Read, structure, design, and verify.',
+    prompt:
+      'Build agents that turn a Google Doc into an executive PowerPoint deck. Ask for my document URL in the workflow instructions, read the actual source, create slides, and export a real PPTX. Verify facts and the export before delivering.',
+  },
+  {
+    icon: Layers3,
+    apps: ['googledocs', 'composio_search'],
+    title: 'Build my editorial team',
+    description: 'Research, draft, and fact-check a blog.',
+    prompt:
+      'Build a blog production workflow: research from my Google Docs, draft a clear article, check every factual claim against source evidence, and prepare a final Google Doc for my review. The topic and source URLs will follow.',
+  },
+  {
+    icon: GitBranch,
+    apps: ['github'],
+    title: 'Make sense of project activity',
+    description: 'Connect issues, context, and decisions.',
+    prompt:
+      'Build agents that read GitHub project issues and pull requests, identify release blockers and their owners, and prepare a source-linked weekly status report. I will provide the repository.',
+  },
+  {
     icon: Layers3,
     title: 'Reconcile the books',
     description: 'Match bank exports to ledger entries.',
     apps: ['quickbooks', 'googlesheets'],
-    demo: 'bank-reconciliation',
     prompt:
       'Build a CFO reconciliation workflow. Read my QuickBooks ledger and a bank transaction export I will provide. Match by amount, currency, date, and reference; distinguish duplicates, timing differences, and unmatched items. Produce a reconciliation table with source IDs and an exception queue for human review. Verify opening balance plus movements equals closing balance. Never invent transactions or post adjusting entries without approval.',
   },
@@ -128,7 +146,6 @@ const examples = [
     title: 'Review invoices before payment',
     description: 'Find duplicates and route exceptions.',
     apps: ['xero', 'gmail', 'googledrive'],
-    demo: 'invoice-drafts',
     prompt:
       'Build an accounts-payable review workflow using Xero invoices and invoice documents I will supply. Check supplier, invoice number, currency, totals, tax, duplicate invoices, and purchase-order evidence where available. Produce a source-linked review register and route missing evidence or mismatches for human review. Do not approve or initiate payments. Ask for company, reporting period, and source references when I run it.',
   },
@@ -137,7 +154,6 @@ const examples = [
     title: 'Prepare a weekly cash report',
     description: 'Explain cash movements and upcoming bills.',
     apps: ['zoho_books', 'googlesheets'],
-    demo: 'cash-forecast',
     prompt:
       'Build a treasury reporting workflow using Zoho Books and my cash spreadsheet. Read current balances, receivables, and payables for the date range I provide. Reconcile opening cash plus receipts minus payments to closing cash by currency, flag missing or stale data, and prepare a weekly cash report with an exceptions list and source references. Keep forecast assumptions separate from observed balances; do not move funds.',
   },
@@ -161,6 +177,14 @@ function rememberTask(id: string | null) {
   const url = new URL(window.location.href);
   if (id) url.searchParams.set('task', id);
   else url.searchParams.delete('task');
+  window.history.replaceState(null, '', url);
+}
+/** The connect redirect lands on ?settings=connections. Clear it once handled,
+ *  or a refresh or a shared link keeps reopening Settings. */
+function rememberSettings(open: boolean) {
+  const url = new URL(window.location.href);
+  if (open) url.searchParams.set('settings', 'connections');
+  else url.searchParams.delete('settings');
   window.history.replaceState(null, '', url);
 }
 function TaskActionButton({
@@ -209,9 +233,9 @@ export default function ChatWorkspace() {
   const [reconciliation, setReconciliation] = useState('');
   const [abInput, setAbInput] = useState('');
   const [abPairs, setAbPairs] = useState(2);
-  const [appCategory, setAppCategory] = useState('featured');
+  const [allAppsOpen, setAllAppsOpen] = useState(false);
   const [appQuery, setAppQuery] = useState('');
-  const [appLimit, setAppLimit] = useState(50);
+  const [appLimit, setAppLimit] = useState(120);
   const mounted = useRef(true),
     inFlight = useRef(false),
     selectedId = useRef<string | null>(null),
@@ -284,7 +308,10 @@ export default function ChatWorkspace() {
           if (r.status === 'rejected') setError(r.reason.message);
       },
     );
-    const showSettings = () => setSettingsOpen(true);
+    const showSettings = () => {
+      setSettingsOpen(true);
+      rememberSettings(true);
+    };
     if (new URLSearchParams(location.search).has('settings'))
       queueMicrotask(showSettings);
     const taskId = new URLSearchParams(location.search).get('task');
@@ -459,32 +486,21 @@ export default function ChatWorkspace() {
     const timer = setTimeout(() => void act('advance'), 250);
     return () => clearTimeout(timer);
   });
-  // The workflow gets renamed by the model, so match the sample workbook to the
-  // starter the task began from, via the app that starter selected.
-  const starterDemoId = examples.find((e) =>
-    chat?.selectedApps?.includes(e.apps[0]),
-  )?.demo;
-  // Settings browses the same catalog as the composer picker. Featured also
-  // carries whatever this task selected and whatever is already connected, so
-  // an app is never stranded without a way to authorize it.
-  const settingsApps = (
-    appCategory === 'featured'
-      ? [
-          ...new Set([
-            ...APP_CATALOG.map((a) => a.slug),
-            ...selectedApps,
-            ...(integrations?.connections.map((c) => c.slug) ?? []),
-          ]),
-        ]
-          .map((slug) => appDefinition(slug))
-          .filter((a): a is NonNullable<typeof a> => Boolean(a))
-      : appCategory === 'finance'
-        ? ALL_APPS.filter((a) => FINANCE_APPS.includes(a.slug))
-        : ALL_APPS
-  ).filter(
+  // Featured, plus whatever this task selected and whatever is already
+  // connected, so an app can never appear without a way to authorize it.
+  const featuredApps = [
+    ...new Set([
+      ...APP_CATALOG.map((a) => a.slug),
+      ...selectedApps,
+      ...(integrations?.connections.map((c) => c.slug) ?? []),
+    ]),
+  ]
+    .map((slug) => appDefinition(slug))
+    .filter((a): a is NonNullable<typeof a> => Boolean(a));
+  const browsedApps = ALL_APPS.filter(
     (a) =>
       !appQuery ||
-      (a.name + ' ' + a.description)
+      (a.name + ' ' + a.slug + ' ' + a.description)
         .toLowerCase()
         .includes(appQuery.toLowerCase()),
   );
@@ -598,7 +614,10 @@ export default function ChatWorkspace() {
           value={selectedApps}
           onChange={setSelectedApps}
           disabled={busy || Boolean(activeRun)}
-          onConnections={() => setSettingsOpen(true)}
+          onConnections={() => {
+            setSettingsOpen(true);
+            rememberSettings(true);
+          }}
           connected={integrations?.connections
             .filter(
               (c) =>
@@ -771,6 +790,7 @@ export default function ChatWorkspace() {
               <TaskButton
                 onClick={() => {
                   setSettingsOpen(true);
+                  rememberSettings(true);
                   void refreshIntegrations();
                 }}
               >
@@ -847,25 +867,28 @@ export default function ChatWorkspace() {
             <div className="home-compose">{composer}</div>
             <div className="starter-grid">
               {examples.map(({ icon: Icon, ...e }) => (
-                <div className="starter-row" key={e.title}>
-                  <button
-                    onClick={() => {
-                      setDraft(e.prompt);
-                      setSelectedApps(e.apps);
-                    }}
-                  >
-                    <Icon size={19} />
-                    <strong>{e.title}</strong>
-                    <p>{e.description}</p>
-                    <ArrowUpRight size={13} />
-                  </button>
-                  {/* Sample workbook so the flow can be tried without connecting accounts. */}
-                  <a href={`/demos/${e.demo}.xlsx`} download>
-                    Excel input
-                  </a>
-                </div>
+                <button
+                  key={e.title}
+                  onClick={() => {
+                    setDraft(e.prompt);
+                    setSelectedApps(e.apps);
+                  }}
+                >
+                  <Icon size={19} />
+                  <strong>{e.title}</strong>
+                  <p>{e.description}</p>
+                  <ArrowUpRight size={13} />
+                </button>
               ))}
             </div>
+            <section className="finance-demo-gallery" aria-label="Finance demos">
+              <h2>Try a finance workflow</h2>
+              <p>Synthetic Excel workbooks. No accounting accounts needed.</p>
+              {financeDemos.map((d) => <div key={d.id}>
+                <Button variant="ghost" onClick={() => { setDraft(d.prompt); setSelectedApps([]); }}><FileText size={16} />{d.title}</Button>
+                <a href={`/demos/${d.id}.xlsx`} download>Download Excel input</a>
+              </div>)}
+            </section>
           </div>
         ) : (
           <ResizablePanelGroup
@@ -1472,7 +1495,7 @@ export default function ChatWorkspace() {
                           onLoading={setReadingDocument}
                           disabled={busy || Boolean(activeRun)}
                         />
-                        {financeDemos.filter((d) => d.id === starterDemoId).map((d) => <div className="demo-input-actions" key={d.id}>
+                        {financeDemos.filter((d) => d.title === chat.title).map((d) => <div className="demo-input-actions" key={d.id}>
                           <Button variant="outline" disabled={busy || Boolean(activeRun) || readingDocument} onClick={async () => {
                             setReadingDocument(true);
                             try {
@@ -1807,7 +1830,14 @@ export default function ChatWorkspace() {
           </Button>
         </DialogContent>
       </Dialog>
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+      <Dialog
+        open={settingsOpen}
+        onOpenChange={(open) => {
+          setSettingsOpen(open);
+          rememberSettings(open);
+          if (!open) setAllAppsOpen(false);
+        }}
+      >
         <DialogContent className="wb-dialog settings-dialog">
           <DialogHeader>
             <DialogTitle>Connections & settings</DialogTitle>
@@ -1857,89 +1887,58 @@ export default function ChatWorkspace() {
             {integrations?.connectionError && (
               <p className="evaluation-issue">{integrations.connectionError}</p>
             )}
-            <div className="picker-browse settings-browse">
-              <label>
-                Browse apps
-                <select
-                  aria-label="App category"
-                  value={appCategory}
-                  onChange={(e) => {
-                    setAppCategory(e.target.value);
-                    setAppLimit(50);
-                    setAppQuery('');
-                  }}
-                >
-                  <option value="featured">Featured &amp; connected</option>
-                  <option value="finance">Finance &amp; accounting</option>
-                  <option value="all">
-                    All {ALL_APPS.length.toLocaleString()} apps
-                  </option>
-                </select>
-              </label>
-              {appCategory === 'all' && (
-                <input
-                  aria-label="Filter apps"
-                  placeholder="Search apps"
-                  value={appQuery}
-                  onChange={(e) => {
-                    setAppQuery(e.target.value);
-                    setAppLimit(50);
-                  }}
-                />
-              )}
-            </div>
             <div className="connection-list">
-              {settingsApps.slice(0, appLimit).map((app) => {
-                  const c = integrations?.connections.find(
-                    (c) => c.slug === app.slug,
-                  );
-                  const connected =
-                    c?.connection?.is_active ||
-                    c?.connection?.isActive ||
-                    c?.connection?.connected_account?.status === 'ACTIVE';
-                  return (
-                    <div key={app.slug}>
-                      <AppIcon slug={app.slug} />
-                      <span>
-                        <strong>{app.name}</strong>
-                        <small>
-                          {app.noAuth
-                            ? 'Ready · no account needed'
-                            : connected
-                              ? 'Connected'
-                              : 'Account not connected'}
-                        </small>
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busy || !integrations?.composio || app.noAuth}
-                        onClick={() => void connect(app.slug)}
-                      >
+              {featuredApps.map((app) => {
+                const c = integrations?.connections.find(
+                  (c) => c.slug === app.slug,
+                );
+                const connected =
+                  c?.connection?.is_active ||
+                  c?.connection?.isActive ||
+                  c?.connection?.connected_account?.status === 'ACTIVE';
+                return (
+                  <div key={app.slug}>
+                    <AppIcon slug={app.slug} />
+                    <span>
+                      <strong>{app.name}</strong>
+                      <small>
                         {app.noAuth
-                          ? 'Ready'
+                          ? 'Ready · no account needed'
                           : connected
-                            ? 'Reconnect'
-                            : 'Connect'}
-                        <ArrowUpRight size={12} />
-                      </Button>
-                    </div>
-                  );
-                })}
+                            ? 'Connected'
+                            : 'Account not connected'}
+                      </small>
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy || !integrations?.composio || app.noAuth}
+                      onClick={() => void connect(app.slug)}
+                    >
+                      {app.noAuth
+                        ? 'Ready'
+                        : connected
+                          ? 'Reconnect'
+                          : 'Connect'}
+                      <ArrowUpRight size={12} />
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
-            {settingsApps.length > appLimit && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setAppLimit(appLimit + 100)}
-              >
-                Show more ({(settingsApps.length - appLimit).toLocaleString()}{' '}
-                remaining)
-              </Button>
-            )}
-            {!settingsApps.length && (
-              <p>No apps match “{appQuery}”.</p>
-            )}
+            <button
+              type="button"
+              className="see-all-apps"
+              onClick={() => {
+                setAppQuery('');
+                setAppLimit(120);
+                setAllAppsOpen(true);
+              }}
+            >
+              <Layers3 size={14} />
+              See all {ALL_APPS.length.toLocaleString()} apps
+              <ArrowUpRight size={12} />
+            </button>
           </div>
           <div className="settings-section">
             <header>
@@ -1961,6 +1960,70 @@ export default function ChatWorkspace() {
               require model pricing. App fees are separate.
             </p>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={allAppsOpen} onOpenChange={setAllAppsOpen}>
+        <DialogContent className="wb-dialog all-apps-dialog">
+          <DialogHeader>
+            <DialogTitle>All apps</DialogTitle>
+            <DialogDescription>
+              Connect an account to let your agents use it. Discovery of the
+              actual actions happens when a workflow runs.
+            </DialogDescription>
+          </DialogHeader>
+          <input
+            className="all-apps-search"
+            aria-label="Search apps"
+            placeholder={`Search ${ALL_APPS.length.toLocaleString()} apps`}
+            value={appQuery}
+            onChange={(e) => {
+              setAppQuery(e.target.value);
+              setAppLimit(120);
+            }}
+          />
+          {!browsedApps.length ? (
+            <p className="all-apps-empty">No apps match “{appQuery}”.</p>
+          ) : (
+            <div className="all-apps-grid">
+              {browsedApps.slice(0, appLimit).map((app) => {
+                const c = integrations?.connections.find(
+                  (c) => c.slug === app.slug,
+                );
+                const connected =
+                  c?.connection?.is_active ||
+                  c?.connection?.isActive ||
+                  c?.connection?.connected_account?.status === 'ACTIVE';
+                return (
+                  <button
+                    key={app.slug}
+                    type="button"
+                    className={connected ? 'connected' : ''}
+                    title={app.description}
+                    disabled={busy || !integrations?.composio || app.noAuth}
+                    onClick={() => void connect(app.slug)}
+                  >
+                    <AppIcon slug={app.slug} size={26} />
+                    <span>{app.name}</span>
+                    {(connected || app.noAuth) && (
+                      <i aria-hidden="true">
+                        <Check size={10} />
+                      </i>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {browsedApps.length > appLimit && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAppLimit(appLimit + 200)}
+            >
+              Show more ({(browsedApps.length - appLimit).toLocaleString()}{' '}
+              remaining)
+            </Button>
+          )}
         </DialogContent>
       </Dialog>
     </SidebarProvider>

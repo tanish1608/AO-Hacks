@@ -54,7 +54,13 @@ Secrets live in `.dev.vars` (gitignored), shape defined in `.env.example`:
 
 A **Chat** (`lib/workbench/types.ts`) is the unit of isolation: it owns the goal, a stack of
 `WorkflowVersion`s, its own `Memory[]`, settings (`target`, `maxIterations`, `maxToolCalls`),
-and a Composio `sessionId`. Memory never crosses chats.
+and a Composio `sessionId`. Task memory never crosses chats.
+
+**Tool knowledge is the one thing that does.** It is a separate, owner-scoped store
+(`tool_knowledge`) holding only what runs observed about an app's tools — argument keys that
+validated, keys a schema rejected, classified error tokens, auth quirks. This is what makes a
+new task start informed rather than blind. The two stores are deliberately different things;
+see invariant 11.
 
 A **Run** holds `attempts[]`. Each attempt snapshots the workflow, its digest, per-node
 `AgentState`, `Observation` traces, and one `Evaluation`. `run.phase` drives a LangGraph
@@ -64,6 +70,12 @@ so progress is durable in D1 between steps rather than held in a long-lived proc
 ```
 prepare → execute (loop per ready node) → evaluate → reflect → repair → execute → …
 ```
+
+An **Experiment** (`chat.experiment`) is a sequential queue of paired runs measuring whether
+memory helps. The route allows only one active run per chat, so arms never run concurrently:
+each finished arm hands off to the next inside the `advance` branch, saving under a kept lease
+(the same two-writes pattern `approve` uses), which means the existing client poll drives the
+whole queue with no client change.
 
 - `design()` — LLM emits a validated DAG + 2–6 criteria. Rejects toolkits outside `selectedApps`.
 - `prepareTest()` — generates one representative test input (`inputOrigin: 'generated'`).
@@ -102,6 +114,32 @@ These are the substance of the track submission. Preserve them in any refactor.
    introductory-price fallback in `lib/workbench/model.ts` expires 2027-01-01.
 10. **Bounded everything.** 7 turns/node, `maxToolCalls`/run, 250k tokens/run, 8 nodes,
     60 memories, 30 versions, 80 messages (`retainMessages` pins the first + last 3 user turns).
+11. **The split store is structural, not a promise.** Derived knowledge
+    (`extractToolKnowledge`) carries argument *keys* and a classified error token — never
+    values, never raw provider text, which can echo document contents. Model-authored rules
+    take a second, gated lane through `sanitizeToolClaim`: a claim must name a tool discovered
+    in that attempt and share no six-word phrase with the task corpus, or it is dropped (not
+    rewritten) and counted in `run.rejectedToolClaims`. Only `kind: 'tool_rule'` reflections
+    are ever eligible.
+12. **Knowledge follows the same corroboration rule as memory.** `proposed` until a
+    *different run* observes it again (`draft.runId !== existing.firstRun`); only `confirmed`
+    rules reach a prompt (`formatKnowledgeForPrompt`); a confirmed rule contradicted twice is
+    `retired`. Rules are advisory — the discovered schema and `tool-policy.ts` still gate
+    every call.
+13. **Never cache connection status.** `stripLiveness()` removes `connected` before storage;
+    a cache hit recomputes it from `gateway.connections()` and falls through to a real search
+    when that is uncertain. A stale `connected: true` would silently defeat invariant 4.
+    Schema carry-forward across repair attempts is bounded to one run, still emits a
+    `kind: 'search'` trace, and still re-checks authorization.
+14. **Ablation arms are frozen and inert.** An arm reads a frozen `memorySnapshot` and
+    `readOnlyKnowledge`, does not commit memory (`reflect` skips `curateMemory` when
+    `run.experimentId` is set), does not bump `usedCount`, and is silent in the conversation
+    (`chatEvent` returns early). An arm that learned from the previous arm would confound the
+    comparison it exists to make.
+15. **A null result is reported as a null result.** `ablation()` returns
+    `insufficient_data` below 3 runs per arm regardless of how the medians fall, and the UI
+    styles `memory_hurt` exactly like `memory_helped`. The verdict is computed in the pure
+    function so the view cannot spin it. Medians, not means — arm samples are tiny.
 
 ### Honesty constraints in prose
 
@@ -118,11 +156,19 @@ lib/workbench/engine.ts                the loop
 lib/workbench/validation.ts            DAG validation, evaluation normalization, memory curation
 lib/workbench/composio.ts              Composio v3 tool_router gateway
 lib/workbench/model.ts                 Gemini structured-output client + usage/cost
+lib/workbench/tool-knowledge.ts        derive/render/merge tool facts; classifyToolError
+lib/workbench/redaction.ts             taskCorpus + sanitizeToolClaim (the lane-B gate)
+lib/workbench/metrics.ts               runMetrics, learningTrend, ablation (pure)
+lib/workbench/experiment.ts            planExperiment, nextArm, applyArmResult, budgets
+lib/workbench/tool-cache.ts            cache key, stripLiveness, applyLiveness (pure)
 lib/workbench/{types,schemas,apps,tool-policy,messages}.ts
 lib/server/workbench-store.ts          D1 persistence, leases, snapshots
-lib/server/workbench-provider.ts       Dependencies wiring: model + tools + LangSmith trace
+lib/server/workbench-provider.ts       Dependencies wiring: model + tools + knowledge + trace
+lib/server/tool-knowledge-store.ts     D1 knowledge store; readOnlyKnowledge for arms
+lib/server/tool-cache.ts               D1 schema cache + liveToolkits probe
 lib/engine/*                           legacy /lab synthetic harness
 components/chat-workspace.tsx          the whole product UI (large; edit surgically)
+components/learning-charts.tsx         hand-rolled SVG trend + paired bars
 components/{workflow-canvas,run-conversation,test-results,app-picker}.tsx
 tests/workbench.test.ts                loop regression tests with a stubbed Model/Tools
 ```
@@ -137,6 +183,16 @@ tests/workbench.test.ts                loop regression tests with a stubbed Mode
 - Prefer extending the existing single `[action]` route over adding new endpoints.
 - After editing `db/schema.ts`, run `db:generate` and apply migrations locally.
 - Never write secrets into client components; all provider keys stay in Worker env.
+
+## The pure-function seam (do not break this)
+
+Scripts run under `node --experimental-strip-types` and **cannot import anything touching
+`cloudflare:workers`**, which rules out all of `lib/server/*`. Tests are pure-function only.
+So every capability is a pure function in `lib/workbench/*` behind an injected interface, with
+the D1 implementation in `lib/server/*`. `Dependencies.knowledge` is **optional** (`knowledge?`)
+precisely so existing tests and `scripts/run-agent.ts` construct dependencies unchanged; every
+engine call site is `deps.knowledge?.lookup(...) ?? []` or `.record(...).catch(() => {})`.
+An accidental `lib/server/*` import from `lib/workbench/*` breaks `npm test` immediately.
 
 ## Testing the loop
 

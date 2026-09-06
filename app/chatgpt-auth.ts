@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { authMode, verifyIapAssertion } from '@/lib/server/iap';
+import { authMode, OPEN_USER, verifyIapAssertion } from '@/lib/server/iap';
 
 export type ChatGPTUser = {
   userId: string;
@@ -21,6 +21,15 @@ const CALLBACK_PATH = '/callback';
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
+  // No sign-in: everyone shares one workspace. Request headers are ignored
+  // entirely so a caller cannot pick an identity by sending one.
+  if (authMode() === 'open')
+    return {
+      userId: OPEN_USER.userId,
+      displayName: 'Workspace',
+      email: OPEN_USER.email,
+      fullName: null,
+    };
   // Behind IAP the oai-* headers are just request input and must never be
   // trusted: only the signed assertion establishes who is calling.
   if (authMode() === 'iap') {

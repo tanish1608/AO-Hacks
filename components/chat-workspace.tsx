@@ -857,7 +857,7 @@ export default function ChatWorkspace() {
           </div>
         )}
         {!chat ? (
-          <div className="wb-home">
+          <div className="wb-home" style={{ paddingTop: '35%' }}>
             <div className="home-intro">
               <h1>What are we working on?</h1>
               <p>

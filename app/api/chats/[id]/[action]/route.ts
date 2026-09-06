@@ -27,9 +27,34 @@ import {
   executePending,
   startRun,
 } from '@/lib/workbench/engine';
+import {
+  applyArmResult,
+  experimentBudgetExceeded,
+  MAX_PAIRS,
+  nextArm,
+  planExperiment,
+  startArm,
+} from '@/lib/workbench/experiment';
 import { validateWorkflow } from '@/lib/workbench/validation';
 import { digest } from '@/lib/engine/runtime';
-import type { Run } from '@/lib/workbench/types';
+import type { Chat, Run } from '@/lib/workbench/types';
+/** Starts the next pending arm on the frozen graph, input, and memory snapshot. */
+async function startExperimentArm(chat: Chat) {
+  const experiment = chat.experiment!;
+  const arm = nextArm(experiment)!;
+  const run = await startRun(chat, arm.useMemory, experiment.versionId, {
+    mode: 'test',
+    input: experiment.input,
+    experimentId: experiment.id,
+    arm: arm.index,
+    memoryPool: experiment.memorySnapshot,
+  });
+  // Arms are bounded harder than a normal test: this spends real model budget.
+  run.maxIterations = Math.min(run.maxIterations, 2);
+  run.maxToolCalls = Math.min(run.maxToolCalls, 8);
+  chat.experiment = startArm(experiment, arm, run.id);
+  return run;
+}
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; action: string }> },
@@ -202,6 +227,50 @@ export async function POST(
         },
       );
       if (run.mode !== 'manual') announceTest(chat, run);
+    } else if (p.action === 'experiment') {
+      if (b.operation === 'cancel') {
+        if (chat.experiment?.status !== 'running')
+          throw new HttpError(409, 'No experiment is running.');
+        chat.experiment.status = 'cancelled';
+        chat.experiment.error = 'Cancelled by the user.';
+        // Stop the arm in flight too, or it would keep advancing alone.
+        if (active?.experimentId === chat.experiment.id) {
+          run = active;
+          run.status = 'blocked';
+          run.phase = 'done';
+          run.pending = null;
+          run.error = 'Experiment cancelled by the user.';
+        }
+      } else if (b.operation === 'start') {
+        if (active)
+          throw new HttpError(
+            409,
+            'Finish or stop the current run before starting an experiment.',
+          );
+        if (chat.experiment?.status === 'running')
+          throw new HttpError(409, 'An experiment is already running.');
+        if (
+          typeof b.input !== 'string' ||
+          !b.input.trim() ||
+          b.input.length > 12000
+        )
+          throw new HttpError(
+            400,
+            'Provide 1–12,000 characters of experiment input.',
+          );
+        if (!Number.isInteger(b.pairs) || b.pairs < 1 || b.pairs > MAX_PAIRS)
+          throw new HttpError(400, `Choose between 1 and ${MAX_PAIRS} pairs.`);
+        const version = chat.versions.at(-1);
+        if (!version) throw new HttpError(409, 'Design a workflow first.');
+        chat.experiment = await planExperiment(
+          chat,
+          b.input.trim(),
+          b.pairs,
+          version.id,
+          new Date().toISOString(),
+        );
+        run = await startExperimentArm(chat);
+      } else throw new HttpError(400, 'Unknown experiment operation.');
     } else {
       if (!run) throw new HttpError(404, 'Run not found');
       if (p.action === 'advance') {
@@ -215,6 +284,42 @@ export async function POST(
         } catch (e) {
           run.status = 'failed';
           run.error = e instanceof Error ? e.message : 'Run step failed';
+        }
+        // Experiments run read-only workflows. An arm that asks for an external
+        // write is not a measurement, so decline it and end the experiment
+        // rather than leaving the chat waiting on a review nobody expected.
+        if (
+          chat.experiment?.status === 'running' &&
+          run.experimentId === chat.experiment.id &&
+          run.status === 'awaiting_approval'
+        ) {
+          run.status = 'blocked';
+          run.phase = 'done';
+          run.pending = null;
+          run.error =
+            'Experiments run read-only workflows only. The requested external write was declined.';
+        }
+        // An arm that just finished hands off to the next one. Saving under a
+        // kept lease mirrors the approve path, so both writes stay guarded.
+        if (
+          chat.experiment?.status === 'running' &&
+          run.experimentId === chat.experiment.id &&
+          !['running', 'paused', 'awaiting_approval'].includes(run.status)
+        ) {
+          chat.experiment = applyArmResult(chat.experiment, run);
+          const stop = experimentBudgetExceeded(chat.experiment);
+          const following =
+            chat.experiment.status === 'running' && !stop
+              ? nextArm(chat.experiment)
+              : null;
+          if (stop && chat.experiment.status === 'running') {
+            chat.experiment.status = 'failed';
+            chat.experiment.error = stop;
+          }
+          if (following) {
+            await saveChat(chat, owner, token, run, true);
+            run = await startExperimentArm(chat);
+          }
         }
       } else if (p.action === 'reconcile') {
         if (

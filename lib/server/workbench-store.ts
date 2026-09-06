@@ -1,6 +1,48 @@
-import type { Chat, Run } from '../workbench/types';
+import type { Chat, Run, RunMetric } from '../workbench/types';
+import { runMetrics } from '../workbench/metrics';
+import { listKnowledge } from './tool-knowledge-store';
 import { database } from './store';
 import { HttpError } from './security';
+const TERMINAL = ['completed', 'exhausted', 'blocked', 'failed'];
+/**
+ * Compact per-run projection. Run payloads carry full traces and are capped at
+ * 30 rows, which is too short a window for a learning trend, so the numbers are
+ * kept separately.
+ */
+export async function listRunMetrics(
+  chatId: string,
+  owner: string,
+  limit = 200,
+): Promise<RunMetric[]> {
+  const rows = await database()
+    .prepare(
+      'SELECT run_id,chat_id,experiment_id,arm,use_memory,status,attempts,passed,score,input_tokens,output_tokens,cost_usd,duration_ms,tool_calls,tool_errors,search_calls,search_cached,graph_digest,created_at FROM agent_run_metrics WHERE chat_id=? AND owner_id=? ORDER BY created_at ASC LIMIT ?',
+    )
+    .bind(chatId, owner, limit)
+    .all<Record<string, string | number | null>>();
+  return rows.results.map((r) => ({
+    runId: String(r.run_id),
+    chatId: String(r.chat_id),
+    experimentId: r.experiment_id === null ? null : String(r.experiment_id),
+    arm: r.arm === null ? null : Number(r.arm),
+    useMemory: Boolean(r.use_memory),
+    status: String(r.status) as RunMetric['status'],
+    attempts: Number(r.attempts),
+    passed: Boolean(r.passed),
+    score: r.score === null ? null : Number(r.score),
+    inputTokens: Number(r.input_tokens),
+    outputTokens: Number(r.output_tokens),
+    // Null means pricing was unknown for that run, never that it was free.
+    costUsd: r.cost_usd === null ? null : Number(r.cost_usd),
+    durationMs: Number(r.duration_ms),
+    toolCalls: Number(r.tool_calls),
+    toolErrors: Number(r.tool_errors),
+    searchCalls: Number(r.search_calls),
+    searchCached: Number(r.search_cached),
+    graphDigest: String(r.graph_digest),
+    createdAt: String(r.created_at),
+  }));
+}
 export async function listChats(owner: string) {
   return (
     await database()
@@ -121,6 +163,38 @@ export async function saveChat(
           JSON.stringify(chat),
         ),
     );
+  // Derived chat/run state, so it belongs in the same guarded batch as the run.
+  if (run && TERMINAL.includes(run.status)) {
+    const m = runMetrics(run);
+    queries.push(
+      database()
+        .prepare(
+          'INSERT INTO agent_run_metrics(run_id,owner_id,chat_id,experiment_id,arm,use_memory,status,attempts,passed,score,input_tokens,output_tokens,cost_usd,duration_ms,tool_calls,tool_errors,search_calls,search_cached,graph_digest,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET status=excluded.status,attempts=excluded.attempts,passed=excluded.passed,score=excluded.score,input_tokens=excluded.input_tokens,output_tokens=excluded.output_tokens,cost_usd=excluded.cost_usd,duration_ms=excluded.duration_ms,tool_calls=excluded.tool_calls,tool_errors=excluded.tool_errors,search_calls=excluded.search_calls,search_cached=excluded.search_cached',
+        )
+        .bind(
+          m.runId,
+          owner,
+          m.chatId,
+          m.experimentId,
+          m.arm,
+          m.useMemory ? 1 : 0,
+          m.status,
+          m.attempts,
+          m.passed ? 1 : 0,
+          m.score,
+          m.inputTokens,
+          m.outputTokens,
+          m.costUsd,
+          m.durationMs,
+          m.toolCalls,
+          m.toolErrors,
+          m.searchCalls,
+          m.searchCached,
+          m.graphDigest,
+          m.createdAt,
+        ),
+    );
+  }
   const result = await database().batch(queries);
   if (!result[0].meta.changes)
     throw new HttpError(
@@ -132,6 +206,20 @@ export function publicChat(chat: Chat) {
   const { sessionId: _sessionId, ...safe } = chat;
   return safe;
 }
+/** Toolkits this task could plausibly use, for the learning view's rule list. */
+function chatToolkits(chat: Chat) {
+  return [
+    ...new Set([
+      ...(chat.selectedApps ?? []),
+      ...chat.versions.flatMap((v) => v.workflow.nodes.flatMap((n) => n.toolkits)),
+    ]),
+  ];
+}
 export async function snapshot(chat: Chat, owner: string) {
-  return { chat: publicChat(chat), runs: await listRuns(chat.id, owner) };
+  const [runs, metrics, knowledge] = await Promise.all([
+    listRuns(chat.id, owner),
+    listRunMetrics(chat.id, owner).catch(() => []),
+    listKnowledge(owner, chatToolkits(chat)).catch(() => []),
+  ]);
+  return { chat: publicChat(chat), runs, metrics, knowledge };
 }

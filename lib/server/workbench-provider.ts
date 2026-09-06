@@ -6,6 +6,13 @@ import type { Chat, Dependencies, Run } from '../workbench/types';
 import { digest } from '../engine/runtime';
 import { database } from './store';
 import { HttpError } from './security';
+import { knowledgeStore, readOnlyKnowledge } from './tool-knowledge-store';
+import {
+  applyLiveness,
+  liveToolkits,
+  readSchemaCache,
+  writeSchemaCache,
+} from './tool-cache';
 const config = () => env as unknown as Record<string, string | undefined>;
 export function workbenchStatus() {
   const e = config();
@@ -64,7 +71,20 @@ export async function dependencies(
       chat.sessionId = (await g.session('foundry:' + owner)).session_id;
     const session = chat.sessionId;
     tools = {
-      search: (query, allowed) => g.search(session, query, allowed),
+      search: async (query, allowed) => {
+        // Schemas are stable enough to reuse; authorization is not, so a hit
+        // still re-checks liveness and falls through when that is uncertain.
+        const cached = await readSchemaCache(owner, query, allowed).catch(
+          () => null,
+        );
+        if (cached) {
+          const live = await liveToolkits(g, session);
+          if (live) return applyLiveness(cached, live);
+        }
+        const fresh = await g.search(session, query, allowed);
+        await writeSchemaCache(owner, query, allowed, fresh).catch(() => {});
+        return fresh.map((t) => ({ ...t, source: 'live' as const }));
+      },
       execute: async (slug, args) => {
         const current = run?.attempts.at(-1);
         const tool = current?.states
@@ -128,6 +148,11 @@ export async function dependencies(
       })
     : null;
   return {
+    // An ablation arm may read what earlier runs learned but must not add to it,
+    // or the second arm would learn from the first and confound the comparison.
+    knowledge: run?.experimentId
+      ? readOnlyKnowledge(owner)
+      : knowledgeStore(owner),
     model: geminiModel({
       key: e.GEMINI_API_KEY,
       model: e.FOUNDRY_MODEL || 'gemini-3.8-flash',

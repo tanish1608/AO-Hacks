@@ -51,6 +51,14 @@ SQLite lives on the instance filesystem, which does not survive a restart, so
 it is restored from `gs://ao-hacks-foundry-db` at boot and snapshotted back
 after writes (debounced, plus a final snapshot on SIGTERM).
 
+Replacing that database is done by writing a **new object key** and pointing
+the service at it in one deploy (`scripts/push-history-to-cloud.sh`), never by
+overwriting the key in use. Scaling to zero first does not make an overwrite
+safe: the scale change is itself a revision deploy, so an instance boots,
+restores the current object, and writes it back when it retires — landing on
+top of the upload. A retiring instance can only write to the key it booted
+with, so a new key is immune.
+
 **This requires `--max-instances=1`.** Two instances would each hold their own
 copy of the file and the last snapshot would win, silently discarding the
 other's work. `--min-instances=1` keeps the instance warm so snapshots are not

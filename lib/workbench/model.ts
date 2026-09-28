@@ -60,7 +60,11 @@ export function openRouterModel(
             },
             signal: AbortSignal.timeout(timeout),
             body: JSON.stringify({ model: settings.model, stream: false,
-              max_tokens: settings.maxOutputTokens ?? (attempt ? 14000 : 7000),
+              // Reasoning tokens are charged against this budget before any
+              // content is emitted, so a ceiling sized for the answer alone
+              // truncates the answer. A reconciliation node exhausted both
+              // 7000 and 14000 and failed the run outright.
+              max_tokens: settings.maxOutputTokens ?? (attempt ? 32000 : 12000),
               provider: { require_parameters: true },
               messages: [
                 { role: 'system', content: system + (attempt ? ' Keep the structured response compact; the previous generation exceeded its token budget.' : '') },
@@ -99,6 +103,8 @@ export function openRouterModel(
           throw fail('Model usage metadata missing; billing for this call is unknown');
         const choice = result?.choices?.[0];
         if (choice?.finish_reason === 'length' && attempt + 1 < maxAttempts) continue;
+        if (choice?.finish_reason === 'length')
+          throw fail('The model ran out of output budget before finishing, twice. Shorten what this step is asked to produce, or split it across two agents.');
         if (choice?.finish_reason !== 'stop') throw fail(`Model output is incomplete (${choice?.finish_reason ?? 'no candidate'}).`);
         if (choice.message?.refusal) throw fail('Model declined this request.');
         const content = choice.message?.content;

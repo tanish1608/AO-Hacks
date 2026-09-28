@@ -535,9 +535,9 @@ The preview advances while the selected task is open and automatic continuation 
 | Runtime | State path | Present boundary |
 |---|---|---|
 | Local Workers/Vinext | Local D1 through Wrangler | Used for recorded local demos and state checks |
-| Node / Cloud Run adapter | SQLite D1 compatibility; optional Cloud Storage snapshots | Newly implemented adapter; current snapshot design requires one instance |
+| Node / Cloud Run adapter | D1-compatible surface over Cloud SQL PostgreSQL, or SQLite locally | Shared transactional storage; instance count no longer constrained by the database |
 
-The Node adapter bridges the Worker bundle rather than introducing another agent engine. Optional cloud persistence snapshots local SQLite. Multiple instances with independent databases would create conflicting writers to a shared snapshot destination, so this is not a horizontally scalable database design. Snapshot delay and process failure create a recovery window. The adapter’s presence does not establish a tested production deployment or service-level objective.
+The Node adapter bridges the Worker bundle rather than introducing another agent engine. Deployed state lives in Cloud SQL PostgreSQL, reached through a D1-compatible adapter so the queries and the lease/revision concurrency control are unchanged. The earlier design snapshotted a local SQLite file to Cloud Storage, which meant two instances would each hold their own copy and the last snapshot would silently discard the other's work; that constraint is removed. Local development still uses SQLite, so every query is kept free of engine-specific SQL. Shared storage removes the database ceiling on instance count; it does not by itself establish a tested production deployment or a service-level objective, and run advancement is still driven by the open browser.
 
 Authentication is performed by the application itself. Accounts use email and password, with PBKDF2-SHA256 hashes under a per-account salt, session tokens stored only as a SHA-256 digest, `HttpOnly` and `SameSite=Lax` cookies, and per-address sign-in throttling. No request header, query parameter, or body field may name an owner. Owner-scoped SQL checks are only meaningful when the identity itself is trustworthy, which is why the earlier header-trusting and proxy-delegated modes were removed rather than kept as options.
 
@@ -563,7 +563,7 @@ The strongest findings concern inspectability and bounded behavior. Several fact
 
 7. **External-state uncertainty.** Successful calls do not verify every desired state transition. Receipts cannot create a transaction across providers. Uncertain mutations need reconciliation.
 
-8. **Limited scale evidence.** Client-driven advancement, serial execution, bounded history, and single-instance snapshots constrain operation. Multi-tenant load and uninterrupted background autonomy are unproven.
+8. **Limited scale evidence.** Client-driven advancement, serial execution, and bounded history still constrain operation. Storage is now shared and transactional rather than a single-instance file, but multi-tenant load and uninterrupted background autonomy remain unproven.
 
 9. **Integration coverage.** Catalog discovery exceeds tested access. Real Google Docs-to-PowerPoint export, linked-account finance automation, and cross-task tool-learning gains remain unverified. The synthetic `/lab` harness cannot substitute for them.
 

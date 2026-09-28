@@ -103,7 +103,15 @@ void test('credential errors redact the key and do not retry', async () => {
 void test('missing token usage and exhausted truncation cannot pass', async () => {
   await assert.rejects(openRouterModel(settings, async () => Response.json({ choices: [] })).json('JSON', {}, schema), /usage metadata/);
   let calls = 0;
-  await assert.rejects(openRouterModel(settings, async () => { calls++; return Response.json(completion(0.002, 'length')); }).json('JSON', {}, schema), /incomplete/);
+  // Truncated twice: say what to do about it, since the fix is to ask this step
+  // for less rather than to retry again.
+  await assert.rejects(
+    openRouterModel(settings, async () => {
+      calls++;
+      return Response.json(completion(0.002, 'length'));
+    }).json('JSON', {}, schema),
+    /ran out of output budget/,
+  );
   assert.equal(calls, 2);
 });
 

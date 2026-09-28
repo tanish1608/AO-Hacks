@@ -17,7 +17,7 @@ export async function POST(
       throw new HttpError(404, 'Unknown integration action');
     if (typeof b.toolkit !== 'string' || !/^[a-z0-9_]{1,60}$/.test(b.toolkit))
       throw new HttpError(400, 'Enter a valid Composio toolkit slug');
-    const returnTo = new URL('/?settings=connections', request.url);
+    const returnTo = new URL(typeof b.returnTo === 'string' && /^\/w\/[a-zA-Z0-9-]{1,80}(?:\?session=[a-zA-Z0-9-]{1,80})?$/.test(b.returnTo) ? b.returnTo : '/?settings=connections', request.url);
     if (typeof b.chatId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(b.chatId))
       returnTo.searchParams.set('task', b.chatId);
     const result = await gateway().authorize(

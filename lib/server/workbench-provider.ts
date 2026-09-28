@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { Client } from 'langsmith';
-import { geminiModel } from '../workbench/model';
+import { modelSettings, workbenchModel } from '../workbench/model';
 import { ComposioGateway } from '../workbench/composio';
 import type { Chat, Dependencies, Run } from '../workbench/types';
 import { digest } from '../engine/runtime';
@@ -10,6 +10,7 @@ import { knowledgeStore } from './tool-knowledge-store';
 import { frozenKnowledge } from '../workbench/experiment';
 import { zohoTools } from '../workbench/zoho-tools';
 import { isReviewedRead } from '../workbench/tool-policy';
+import { appDefinition } from '../workbench/apps';
 import {
   applyLiveness,
   liveToolkits,
@@ -19,12 +20,15 @@ import {
 const config = () => env as unknown as Record<string, string | undefined>;
 export function workbenchStatus() {
   const e = config();
+  const settings = modelSettings(e);
   return {
-    model: e.FOUNDRY_MODEL || 'gemini-3.8-flash',
+    model: settings.model,
+    provider: settings.provider,
+    configured: Boolean(settings.key),
     gemini: Boolean(e.GEMINI_API_KEY),
     composio: Boolean(e.COMPOSIO_API_KEY),
     langsmith: Boolean(e.LANGSMITH_API_KEY),
-    pricing: Boolean(
+    pricing: settings.provider === 'openrouter' || Boolean(
       e.FOUNDRY_INPUT_PRICE_PER_MILLION && e.FOUNDRY_OUTPUT_PRICE_PER_MILLION,
     ),
   };
@@ -62,10 +66,10 @@ export async function dependencies(
   run?: Run,
 ): Promise<Dependencies> {
   const e = config();
-  if (!e.GEMINI_API_KEY)
+  if (!modelSettings(e).key)
     throw new HttpError(
       503,
-      'Set GEMINI_API_KEY in the server environment to generate and run agents.',
+      'Configure the selected provider API key (OPENROUTER_API_KEY or GEMINI_API_KEY) to generate and run agents.',
     );
   let tools: Dependencies['tools'] = null;
   if (e.COMPOSIO_API_KEY) {
@@ -160,15 +164,20 @@ export async function dependencies(
   return {
     // An ablation arm may read what earlier runs learned but must not add to it,
     // or the second arm would learn from the first and confound the comparison.
-    knowledge: run?.experimentId
+    preflight: async (toolkits) => {
+      if (!toolkits.length) return null;
+      if (!e.COMPOSIO_API_KEY) return 'Connect your apps in Settings before running this workflow.';
+      const requiresAuth = toolkits.filter(slug => !appDefinition(slug)?.noAuth);
+      if (!requiresAuth.length) return null;
+      const live = chat.sessionId ? await liveToolkits(gateway(), chat.sessionId) : null;
+      if (!live) return 'We could not verify app connections. Refresh connections in Settings and try again.';
+      const missing = requiresAuth.filter(slug => !live.has(slug.toLowerCase()));
+      return missing.length ? 'Connect these apps before running: ' + missing.map(slug => appDefinition(slug)?.name ?? slug).join(', ') + '.' : null;
+    },
+    knowledge: run?.validationId ? null : run?.experimentId
       ? frozenKnowledge(chat.experiment?.id === run.experimentId ? chat.experiment : undefined)
       : knowledgeStore(owner),
-    model: geminiModel({
-      key: e.GEMINI_API_KEY,
-      model: e.FOUNDRY_MODEL || 'gemini-3.8-flash',
-      inputPrice: e.FOUNDRY_INPUT_PRICE_PER_MILLION,
-      outputPrice: e.FOUNDRY_OUTPUT_PRICE_PER_MILLION,
-    }),
+    model: workbenchModel(e),
     tools,
     trace: async (t, runId) => {
       if (!client) return 'disabled';

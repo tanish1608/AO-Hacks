@@ -1,10 +1,12 @@
 # Running on Google Cloud
 
+> Retired September 26, 2026: the `agent-foundry` Cloud Run service was deleted at the owner's request. Its final database (13 chats, 29 runs) and service configuration were backed up locally under the ignored `work/startup-revisit-20260926/` directory. Database buckets, container images, Secret Manager entries, and the project remain; no new deployment was created. The commands below document the historical setup, not a running service.
+
 The application is built for Cloudflare Workers with a D1 binding. On Google
 Cloud the same bundle runs on Cloud Run behind a small Node adapter, so there
 is one codebase and one SQL dialect rather than a fork.
 
-- **Live service:** https://agent-foundry-826928184760.us-central1.run.app
+- **Former service:** https://agent-foundry-826928184760.us-central1.run.app
 - **Project:** `ao-hacks` (826928184760), region `us-central1`
 
 ## How the adapter works
@@ -50,6 +52,14 @@ gcloud beta iap web add-iam-policy-binding --project=ao-hacks --region=us-centra
 SQLite lives on the instance filesystem, which does not survive a restart, so
 it is restored from `gs://ao-hacks-foundry-db` at boot and snapshotted back
 after writes (debounced, plus a final snapshot on SIGTERM).
+
+Replacing that database is done by writing a **new object key** and pointing
+the service at it in one deploy (`scripts/push-history-to-cloud.sh`), never by
+overwriting the key in use. Scaling to zero first does not make an overwrite
+safe: the scale change is itself a revision deploy, so an instance boots,
+restores the current object, and writes it back when it retires — landing on
+top of the upload. A retiring instance can only write to the key it booted
+with, so a new key is immune.
 
 **This requires `--max-instances=1`.** Two instances would each hold their own
 copy of the file and the last snapshot would win, silently discarding the

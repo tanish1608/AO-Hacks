@@ -63,6 +63,12 @@ export interface Memory {
   usedCount: number;
 }
 export interface Chat {
+  regressionCases?: import('./improvement.ts').RegressionCase[];
+  improvement?: import('./improvement.ts').Improvement;
+  rollback?: { workflow: Workflow; rules: string[] };
+  sourceShare?: string;
+  /** User-approved business rules, scoped to this workflow only. */
+  rules?: string[];
   id: string;
   title: string;
   createdAt: string;
@@ -152,6 +158,10 @@ export interface PendingAction {
   status: 'awaiting_approval' | 'executing' | 'unknown';
 }
 export interface Run {
+  validationId?: string;
+  regressionCase?: import('./improvement.ts').RegressionCase;
+  /** Freeze approved rules so later edits cannot change an in-flight run. */
+  rules?: string[];
   mode?: 'test' | 'manual';
   experimentId?: string;
   arm?: number;
@@ -201,6 +211,7 @@ export interface Tools {
   execute(slug: string, args: Record<string, Json>): Promise<unknown>;
 }
 export interface Dependencies {
+  preflight?: (toolkits: string[]) => Promise<string | null>;
   model: Model;
   tools: Tools | null;
   /** Optional so existing tests and terminal scripts construct dependencies unchanged. */

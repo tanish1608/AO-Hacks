@@ -11,3 +11,7 @@ scripts
 *.md
 .dev.vars*
 .env*
+
+work
+outputs
+attachments

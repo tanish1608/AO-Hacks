@@ -1,3 +1,5 @@
+import { validateCases, planImprovement, recordImprovement, canApply, validationAttemptLimit } from '@/lib/workbench/improvement';
+import { assertShareActive } from '@/lib/server/workflow-sharing';
 import {
   runRecoveryChecks,
   recoveryCheckMessage,
@@ -39,6 +41,7 @@ import { validateWorkflow, retrieveMemory } from '@/lib/workbench/validation';
 import { digest } from '@/lib/engine/runtime';
 import type { Chat, Run } from '@/lib/workbench/types';
 import { listKnowledge } from '@/lib/server/tool-knowledge-store';
+import { cleanRules } from '@/lib/workbench/workspace';
 /** Starts the next pending arm on the frozen graph, input, and memory snapshot. */
 async function startExperimentArm(chat: Chat) {
   const experiment = chat.experiment!;
@@ -54,6 +57,19 @@ async function startExperimentArm(chat: Chat) {
   run.maxIterations = Math.min(run.maxIterations, 2);
   run.maxToolCalls = Math.min(run.maxToolCalls, 8);
   chat.experiment = startArm(experiment, arm, run.id);
+  return run;
+}
+async function startValidation(chat: Chat) {
+  const suite = chat.improvement!;
+  const temporary = structuredClone(chat);
+  temporary.rules = suite.rules;
+  temporary.versions = [{id:suite.id,createdAt:suite.createdAt,workflow:suite.candidate,digest:await digest(suite.candidate),reason:'Candidate under test'}];
+  // Keep candidate tests independent of learned facts and earlier case outputs.
+  temporary.memory = [];
+  const run = await startRun(temporary, false, undefined, {mode:'test',input:suite.cases[suite.index].input});
+  run.validationId=suite.id; run.regressionCase=structuredClone(suite.cases[suite.index]); run.maxIterations=validationAttemptLimit(suite.cases[suite.index]); run.maxToolCalls=Math.min(run.maxToolCalls,8);
+  suite.runId=run.id;
+  chat.messages.push({id:crypto.randomUUID(),role:'assistant',createdAt:new Date().toISOString(),runId:run.id,content:`Testing candidate, round ${suite.round}/${suite.maxRounds}: **${run.regressionCase.name}**. Saved assertions and the original rubric stay fixed. External writes are disabled.`});
   return run;
 }
 export async function POST(
@@ -84,6 +100,10 @@ export async function POST(
       'node',
       'settings',
       'memory',
+      'rules',
+      'regression',
+      'improvement',
+      'rollback',
       'experiment',
     ];
     if (!allowed.includes(p.action)) throw new HttpError(404, 'Unknown action');
@@ -96,7 +116,7 @@ export async function POST(
       ['running', 'paused', 'awaiting_approval'].includes(r.status),
     );
     if (
-      ['message', 'node', 'settings', 'memory', 'run'].includes(p.action) &&
+      ['message', 'node', 'settings', 'memory', 'rules', 'run', 'regression', 'improvement', 'rollback'].includes(p.action) &&
       active
     )
       throw new HttpError(
@@ -111,7 +131,35 @@ export async function POST(
         409,
         'Reconcile the previous external action before starting another run.',
       );
-    if (p.action === 'recovery-checks') {
+    if (chat.sourceShare) {
+      if (!['run','advance','pause','resume','approve','reject','reconcile'].includes(p.action)) throw new HttpError(403, 'Published workflows are fixed. Create your own workflow to edit it.');
+      if (['run','advance','resume','approve'].includes(p.action)) await assertShareActive(chat.sourceShare);
+      if (p.action === 'run' && (runs.length || b.mode !== 'manual')) throw new HttpError(409,'This run has already started. Use Run again on the workflow page for a new input.');
+    }
+    if (unresolved && ['improvement','rollback','regression'].includes(p.action)) throw new HttpError(409,'Reconcile the uncertain external action first.');
+    if (p.action === 'regression') {
+      try { chat.regressionCases=validateCases(b.cases); } catch(e) { throw new HttpError(400,(e as Error).message); }
+    } else if (p.action === 'improvement') {
+      if (b.operation === 'start') {
+        if (typeof b.rule !== 'string' || b.rule.length>1000) throw new HttpError(400,'Provide a correction up to 1,000 characters, or leave it empty to test the current rules.');
+        chat.improvement=await planImprovement(chat,b.rule);
+        run=await startValidation(chat);
+      } else if (b.operation === 'apply') {
+        if (!await canApply(chat)) throw new HttpError(409,'The candidate must pass all saved cases on the same version, and the workflow and tests must still match.');
+        const suite=chat.improvement!;
+        chat.rollback={workflow:structuredClone(chat.versions.at(-1)!.workflow),rules:structuredClone(chat.rules ?? [])};
+        chat.rules=structuredClone(suite.rules);
+        chat.versions.push({id:crypto.randomUUID(),createdAt:new Date().toISOString(),workflow:structuredClone(suite.candidate),digest:await digest(suite.candidate),reason:'User applied candidate after saved regression suite passed'});
+        suite.status='applied';
+        chat.messages.push({id:crypto.randomUUID(),role:'assistant',createdAt:new Date().toISOString(),content:'Applied the tested correction. All saved cases passed the same candidate. This is regression evidence, not a guarantee on new inputs. You can undo this release from Tests.'});
+      } else throw new HttpError(400,'Choose start or apply.');
+    } else if (p.action === 'rollback') {
+      if (!chat.rollback) throw new HttpError(409,'No correction release to undo.');
+      const previous=chat.rollback; chat.rules=previous.rules;
+      chat.versions.push({id:crypto.randomUUID(),createdAt:new Date().toISOString(),workflow:previous.workflow,digest:await digest(previous.workflow),reason:'User rolled back correction release'});
+      delete chat.rollback;
+      if (chat.improvement) chat.improvement.status='cancelled';
+    } else if (p.action === 'recovery-checks') {
       const report = await runRecoveryChecks();
       chat.messages.push({
         id: crypto.randomUUID(),
@@ -175,6 +223,11 @@ export async function POST(
         createdAt: new Date().toISOString(),
         content: `Updated **${node.name}**. The new instruction will apply to your next run.`,
       });
+    } else if (p.action === 'rules') {
+      try { chat.rules = cleanRules(b.rules); }
+      catch (error) { throw new HttpError(400, (error as Error).message); }
+      chat.messages.push({ id: crypto.randomUUID(), role: 'assistant', createdAt: new Date().toISOString(),
+        content: `Updated your workflow rules (${chat.rules.length}). They apply to future runs of this workflow. Previous runs keep their original rules. Test the workflow to check the new behavior.` });
     } else if (p.action === 'settings') {
       if (
         typeof b.target !== 'number' ||
@@ -297,6 +350,13 @@ export async function POST(
           run.status = 'failed';
           run.error = e instanceof Error ? e.message : 'Run step failed';
         }
+        if (chat.improvement?.status === 'running' && run.validationId === chat.improvement.id && !['running','paused','awaiting_approval'].includes(run.status)) {
+          await recordImprovement(chat.improvement,run);
+          if (chat.improvement.status === 'running') {
+            await saveChat(chat,owner,token,run,true);
+            run=await startValidation(chat);
+          } else chat.messages.push({id:crypto.randomUUID(),role:'assistant',createdAt:new Date().toISOString(),content:chat.improvement.status === 'passed' ? 'All saved tests passed the same candidate workflow. Review the results in Tests, then apply the correction when ready. Your current workflow has not changed.' : `Candidate not applied: ${chat.improvement.error}`});
+        }
         // Experiments run read-only workflows. An arm that asks for an external
         // write is not a measurement, so decline it and end the experiment
         // rather than leaving the chat waiting on a review nobody expected.
@@ -373,6 +433,7 @@ export async function POST(
         if (!['running', 'awaiting_approval', 'paused'].includes(run.status))
           throw new HttpError(409, 'Run is not active');
         if (b.stop === true) {
+          if (run.validationId && chat.improvement?.id === run.validationId) chat.improvement.status='cancelled';
           run.status = 'blocked';
           run.phase = 'done';
           run.pending = null;
@@ -396,7 +457,8 @@ export async function POST(
       } else if (p.action === 'reject') {
         if (
           run.status !== 'awaiting_approval' ||
-          run.pending?.status !== 'awaiting_approval'
+          run.pending?.status !== 'awaiting_approval' ||
+          b.pendingId !== run.pending.id
         )
           throw new HttpError(409, 'No undispatched action is awaiting review');
         run.status = 'blocked';

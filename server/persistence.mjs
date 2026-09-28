@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 /**
  * Cloud Run's filesystem does not survive an instance, so the database is
@@ -16,6 +16,20 @@ let storage = null;
 let timer = null;
 let inFlight = Promise.resolve();
 let currentFile = null;
+let currentDatabase = null;
+export function setSnapshotDatabase(database) {
+  currentDatabase = database;
+}
+export async function snapshotBytes(database, file) {
+  const temporary = `${file}.snapshot-${crypto.randomUUID()}`;
+  try {
+    // SQLite's online backup includes committed WAL pages, unlike copying the main file.
+    await database.db.backup(temporary);
+    return await readFile(temporary);
+  } finally {
+    await unlink(temporary).catch(() => {});
+  }
+}
 async function bucket() {
   if (!BUCKET) return null;
   if (!storage) {
@@ -49,7 +63,9 @@ async function upload(file) {
   const target = await bucket();
   if (!target) return;
   try {
-    const data = await readFile(file);
+    if (!currentDatabase)
+      throw new Error('Snapshot database is not initialized');
+    const data = await snapshotBytes(currentDatabase, file);
     await target.file(OBJECT).save(data, {
       contentType: 'application/x-sqlite3',
       resumable: false,

@@ -2,12 +2,12 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createChat, design, startRun, announceTest } from '../lib/workbench/engine.ts';
 import { advanceResilient } from '../lib/workbench/recovery.ts';
-import { geminiModel } from '../lib/workbench/model.ts';
+import { workbenchModel } from '../lib/workbench/model.ts';
 import { runMetrics } from '../lib/workbench/metrics.ts';
 import type { Run } from '../lib/workbench/types.ts';
 const fixtures = JSON.parse(readFileSync('lib/workbench/finance-demos.json','utf8'));
 const vars = Object.fromEntries(readFileSync('.dev.vars','utf8').split('\n').filter(x=>x.includes('=')&&!x.trim().startsWith('#')).map(x=>{const i=x.indexOf('=');return [x.slice(0,i).trim(),x.slice(i+1).trim().replace(/^["']|["']$/g,'')];}));
-const deps = {model:geminiModel({key:vars.GEMINI_API_KEY,model:vars.FOUNDRY_MODEL||'gemini-3.8-flash',inputPrice:vars.FOUNDRY_INPUT_PRICE_PER_MILLION,outputPrice:vars.FOUNDRY_OUTPUT_PRICE_PER_MILLION}),tools:null};
+const deps = {model:workbenchModel({...vars,...process.env}),tools:null};
 mkdirSync('outputs/finance-demos',{recursive:true});
 for(const fixture of fixtures) {
   const path=`outputs/finance-demos/${fixture.id}-runs.json`;

@@ -101,18 +101,12 @@ export async function verifyIapAssertion(
 }
 /**
  * 'iap'    verified Identity-Aware Proxy assertion.
- * 'open'   no sign-in: every visitor shares one workspace. For a private test
- *          deployment only — the server holds provider keys and connected app
- *          accounts, so anyone who can reach the URL can use them.
  * 'sites'  the OpenAI Sites headers, which only mean anything where that
  *          platform injects and strips them.
  */
-export function authMode(): 'iap' | 'open' | 'sites' {
+export function authMode(): 'iap' | 'sites' {
   const mode = (env as unknown as Record<string, string | undefined>).AUTH_MODE;
-  return mode === 'iap' ? 'iap' : mode === 'open' ? 'open' : 'sites';
+  if (mode && mode !== 'iap' && mode !== 'sites')
+    throw new Error('Unsupported authentication mode. Shared open workspaces are disabled.');
+  return mode === 'iap' ? 'iap' : 'sites';
 }
-/** The single shared identity used in open mode. */
-export const OPEN_USER = {
-  userId: 'open-workspace',
-  email: 'open@localhost',
-};

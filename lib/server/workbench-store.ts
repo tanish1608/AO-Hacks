@@ -4,6 +4,7 @@ import { needsZohoDraftDelivery } from '../workbench/zoho-tools';
 import { listKnowledge } from './tool-knowledge-store';
 import { database } from './store';
 import { HttpError } from './security';
+import type { WorkflowRow } from '../workbench/workspace';
 const TERMINAL = ['completed', 'exhausted', 'blocked', 'failed'];
 /**
  * Compact per-run projection. Run payloads carry full traces and are capped at
@@ -44,15 +45,23 @@ export async function listRunMetrics(
     createdAt: String(r.created_at),
   }));
 }
-export async function listChats(owner: string) {
-  return (
-    await database()
+export async function listChats(owner: string): Promise<WorkflowRow[]> {
+  const rows = await database()
       .prepare(
-        'SELECT id,title,updated_at FROM chats WHERE owner_id=? ORDER BY updated_at DESC LIMIT 100',
+        `SELECT c.id,c.title,c.updated_at,
+        COALESCE(json_array_length(json_extract(c.payload,'$.versions[#-1].workflow.nodes')),0) AS steps,
+        (SELECT json_object('id',r.id,'status',r.status,'mode',json_extract(r.payload,'$.mode'),
+          'error',json_extract(r.payload,'$.error'),'updatedAt',r.updated_at,
+          'pendingStatus',json_extract(r.payload,'$.pending.status'))
+         FROM agent_runs r WHERE r.chat_id=c.id AND r.owner_id=c.owner_id
+         ORDER BY CASE WHEN json_extract(r.payload,'$.pending.status') IN ('unknown','executing') THEN 0
+          WHEN r.status IN ('running','paused','awaiting_approval') THEN 1 ELSE 2 END,
+          r.created_at DESC,r.id DESC LIMIT 1) AS latest_run
+         FROM chats c WHERE c.owner_id=? ORDER BY c.updated_at DESC LIMIT 100`,
       )
       .bind(owner)
-      .all()
-  ).results;
+      .all<{id:string;title:string;updated_at:string;steps:number;latest_run:string|null}>();
+  return rows.results.map(({latest_run,...row}) => ({...row,latestRun:latest_run ? JSON.parse(latest_run) : null}));
 }
 export async function loadChat(id: string, owner: string): Promise<Chat> {
   const row = await database()

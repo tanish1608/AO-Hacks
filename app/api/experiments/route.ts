@@ -5,7 +5,7 @@ import { authorize, failure, HttpError, json, readJson } from '@/lib/server/secu
 import { insertExperiment, listExperiments, publicExperiment } from '@/lib/server/store';
 export async function GET(request:Request){try{return json({experiments:await listExperiments(await authorize(request))});}catch(e){return failure(e);}}
 export async function POST(request:Request){try{
- const owner=await authorize(request,true);const b=await readJson(request);const mode=b.mode??'reference';if(!['reference','model'].includes(mode))throw new HttpError(400,'Invalid execution mode');if(mode==='model'&&!createProvider())throw new HttpError(422,'Configure the matching GEMINI_API_KEY or OPENAI_API_KEY and FOUNDRY_MODEL on the server before using model-backed search');
+ const owner=await authorize(request,true);const b=await readJson(request);const mode=b.mode??'reference';if(!['reference','model'].includes(mode))throw new HttpError(400,'Invalid execution mode');if(mode==='model'&&!createProvider())throw new HttpError(422,'Configure the matching OPENROUTER_API_KEY, GEMINI_API_KEY or OPENAI_API_KEY and FOUNDRY_MODEL on the server before using model-backed search');
  const raw=b.contract??CONTRACTS.find(c=>c.id===b.contractId);let contract;try{contract=validateContract(raw);}catch(e){throw new HttpError(400,e instanceof Error?e.message:'Invalid task contract');}
  if(b.goal!==undefined){if(typeof b.goal!=='string'||b.goal.trim().length<10||b.goal.length>8000)throw new HttpError(400,'Goal must contain 10–8000 characters');contract.goal=b.goal.trim();}
  const name=typeof b.name==='string'?b.name.trim():contract.name;if(!name||name.length>120)throw new HttpError(400,'Experiment name must contain 1–120 characters');

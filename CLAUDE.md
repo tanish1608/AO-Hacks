@@ -4,18 +4,19 @@ Guidance for Claude Code when working in this repository.
 
 ## What this is
 
-**Agent Foundry** — a hackathon entry for *Track 1: Automated Agent Engineering*. It is a
+**Agent Foundry** — a reusable-workflow product that began as a hackathon entry. It is a
 conversational workspace where a user describes a task in chat, the system designs a
 multi-agent DAG to do it, runs it against real third-party apps through Composio, evaluates
 the output against a frozen rubric, reflects on the failure evidence, writes scoped memory,
 repairs the graph, and retries — bounded by an iteration/token/tool budget.
 
-Two surfaces:
-- `/` — the **primary product**: chat + React Flow agent canvas (`components/chat-workspace.tsx`).
-- `/lab` — an older synthetic deterministic experiment harness (`lib/engine/*`,
-  `components/foundry-console.tsx`). Kept for the benchmark script; not the product.
+The primary surface at `/` is chat, with recent workflows in the sidebar, workflow rules,
+and a React Flow canvas (`components/chat-workspace.tsx`). `/lab` redirects to `/`;
+the historical deterministic experiment engine remains available to the benchmark script.
+Work is local-only until a new deployment is explicitly requested. See
+`docs/PRODUCT_FOUNDATION.md` for implemented behavior and outstanding public-launch gates.
 
-Default model is **Gemini 3.8 Flash** (`FOUNDRY_MODEL`). All third-party tool access is
+Current default is **OpenRouter / openai/gpt-4o** (`FOUNDRY_PROVIDER=openrouter`, `FOUNDRY_MODEL`). Historical evidence uses Gemini; do not relabel it. The old Cloud Run service was retired on September 26, 2026. All third-party tool access is
 routed through **Composio v3 tool_router**. Orchestration steps run through **LangGraph**;
 observability optionally forwards to **LangSmith**.
 
@@ -46,7 +47,7 @@ node --experimental-strip-types scripts/check-composio.ts
 ```
 
 Secrets live in `.dev.vars` (gitignored), shape defined in `.env.example`:
-`GEMINI_API_KEY`, `COMPOSIO_API_KEY`, optional `LANGSMITH_*` and price overrides.
+`OPENROUTER_API_KEY`, `FOUNDRY_PROVIDER`, `FOUNDRY_MODEL`, `COMPOSIO_API_KEY`, optional `LANGSMITH_*`. Gemini remains an explicitly selectable legacy provider. OpenRouter uses provider-reported billing rather than Gemini price estimates.
 
 ## Architecture: the learning loop
 

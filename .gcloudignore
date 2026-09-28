@@ -1,0 +1,10 @@
+.git
+.gitignore
+#!include:.gitignore
+node_modules
+work
+outputs
+.data
+.wrangler
+.dev.vars*
+.env*

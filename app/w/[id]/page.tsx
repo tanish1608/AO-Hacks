@@ -1,5 +1,6 @@
 import PublicWorkflow from '@/components/public-workflow';
-import { requireUser } from '@/app/auth';
+import LockedWorkflow from '@/components/locked-workflow';
+import { currentUser } from '@/app/auth';
 export const dynamic = 'force-dynamic';
 export default async function WorkflowPage({
   params,
@@ -8,7 +9,12 @@ export default async function WorkflowPage({
 }) {
   const id = (await params).id;
   // Shared links are account-only: running one creates a private session that
-  // spends model budget and uses the visitor's own connected accounts.
-  await requireUser(`/w/${id}`);
-  return <PublicWorkflow id={id} signedIn />;
+  // spends model budget and uses the visitor's own connected accounts. Show the
+  // locked page rather than bouncing to /login, so the person can see they
+  // followed a real link before being asked to sign up.
+  return (await currentUser()) ? (
+    <PublicWorkflow id={id} signedIn />
+  ) : (
+    <LockedWorkflow id={id} />
+  );
 }

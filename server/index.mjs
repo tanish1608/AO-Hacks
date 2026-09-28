@@ -11,6 +11,7 @@ import { assignEnv, env } from './workers-shim.mjs';
 import { migrate } from './migrate.mjs';
 import { restore, scheduleSnapshot, shutdown, setSnapshotDatabase } from './persistence.mjs';
 import { runtimePolicy } from './runtime-policy.mjs';
+import { toNodeHeaders } from './http.mjs';
 const runtime = runtimePolicy(process.env);
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -89,9 +90,7 @@ async function handle(request) {
 const server = createServer(async (req, res) => {
   try {
     const response = await handle(toRequest(req));
-    const headers = {};
-    for (const [key, value] of response.headers) headers[key] = value;
-    res.writeHead(response.status, headers);
+    res.writeHead(response.status, toNodeHeaders(response));
     if (response.body) await pipeline(Readable.fromWeb(response.body), res);
     else res.end();
   } catch (error) {

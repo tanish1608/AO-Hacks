@@ -8,6 +8,14 @@ import type {
 } from './types.ts';
 import { digest } from './digest.ts';
 import { needsZohoDraftDelivery, verifiedZohoDrafts } from './zoho-tools.ts';
+/** Output as compared by a deterministic assertion: markdown links reduced to
+ *  their label and emphasis characters removed. Applied to both sides. */
+export function plainText(value: string): string {
+  return value
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[#*_`>]/g, '')
+    .trim();
+}
 const text = (v: unknown, max: number) =>
   typeof v === 'string' && v.trim().length > 0 && v.length <= max;
 export function validateWorkflow(input: unknown): Workflow {
@@ -122,21 +130,20 @@ export function normalizeEvaluation(
   const checks = rubric.map((c) => {
     if (c.assertion && c.assertion.kind !== 'rubric') {
       const assertion = c.assertion,
-        text = (final?.output ?? '')
-          .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-          .replace(/[#*_`>]/g, '')
-          .trim();
+        text = plainText(final?.output ?? ''),
+        haystack = text.toLowerCase();
       const words = text ? text.split(/\s+/u).length : 0;
+      // The term is normalized the same way as the output. Stripping markdown
+      // emphasis removes underscores, so a literal like "opening_balances"
+      // became "openingbalances" in the text but not in the term, and a
+      // correct JSON output could never satisfy its own contains check.
+      const has = (t: string) => haystack.includes(plainText(t).toLowerCase());
       const passed =
         assertion.kind === 'word_count'
           ? words >= assertion.min && words <= assertion.max
           : assertion.kind === 'contains'
-            ? assertion.terms.every((t) =>
-                text.toLowerCase().includes(t.toLowerCase()),
-              )
-            : assertion.terms.every(
-                (t) => !text.toLowerCase().includes(t.toLowerCase()),
-              );
+            ? assertion.terms.every(has)
+            : !assertion.terms.some(has);
       const verified = final?.status === 'done' && finalRefs.length > 0;
       return {
         criterionId: c.id,

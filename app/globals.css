@@ -4622,3 +4622,28 @@ body:has(.public-workflow) { background: #fafbfc; }
 .home-caption { display:flex; align-items:flex-start; gap:8px; max-width:560px; margin:16px auto 0;
   font-size:12.5px; line-height:1.6; color:#98a2b3; text-align:left; }
 .home-caption svg { flex:0 0 auto; margin-top:3px; }
+
+/* Model picker in the composer footer, replacing a label that looked
+   clickable and was not. */
+.model-picker-trigger { display:flex; align-items:center; gap:5px; font-size:11.5px !important;
+  color:#7b8698 !important; padding:3px 7px !important; height:auto !important; max-width:190px; }
+.model-picker-trigger > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.model-picker-menu { width:min(94vw,360px); max-height:60dvh; overflow-y:auto; }
+.model-picker-item { align-items:flex-start !important; padding:9px 30px 9px 9px !important; border-radius:6px !important; }
+.model-picker-item strong { font-size:12px; font-weight:600; display:block; color:#46566d; }
+.model-picker-item strong em { font-style:normal; font-weight:400; color:#9aa5b6; margin-left:5px; }
+.model-picker-item small { font-size:10.5px; line-height:1.5; color:#8b96a7; display:block; margin-top:2px; }
+.model-picker-item .model-price { color:#aab3c0; margin-top:3px; }
+.model-picker-menu code { font-size:10.5px; background:#f1f3f6; padding:1px 4px; border-radius:4px; }
+
+/* What this workflow does, above the graph. */
+.workflow-summary { padding:16px 18px 14px; border-bottom:1px solid #e9ebef; background:#fcfcfd; }
+.workflow-summary h2 { font-size:14px; font-weight:600; color:#37465c; letter-spacing:-.2px; }
+.workflow-summary > p { font-size:12.5px; line-height:1.6; color:#6b7788; margin:6px 0 0;
+  display:-webkit-box; -webkit-line-clamp:4; line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+.workflow-summary-facts { display:flex; flex-wrap:wrap; gap:6px; margin-top:11px; }
+.workflow-summary-facts > span { display:inline-flex; align-items:center; gap:5px; font-size:11px;
+  color:#68748a; background:#eef1f5; border-radius:999px; padding:3px 9px; }
+.workflow-summary-app img { border-radius:3px; }
+.canvas-tab { display:flex; flex-direction:column; min-height:0; }
+.canvas-tab .workflow-graph { flex:1; min-height:0; }

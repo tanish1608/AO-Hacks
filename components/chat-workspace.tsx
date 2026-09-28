@@ -15,7 +15,6 @@ import {
   MailCheck,
   MessageSquare,
   Presentation,
-  ReceiptText,
   Play,
   Plus,
   RotateCcw,
@@ -35,6 +34,7 @@ import ReactMarkdown from 'react-markdown';
 import WorkflowOutput from './workflow-output';
 import remarkGfm from 'remark-gfm';
 import BrandLogo from './brand-logo';
+import ModelPicker from './model-picker';
 import WorkflowCanvas from './workflow-canvas';
 import AppPicker, { AppIcon } from './app-picker';
 import RunConversation from './run-conversation';
@@ -126,7 +126,7 @@ const money = (x: number | null) =>
 const STARTERS: Record<string, typeof Layers3> = {
   'campaign-replies': MailCheck,
   'docx-to-deck': Presentation,
-  'invoice-exceptions': ReceiptText,
+  'pdf-to-doc': FileText,
 };
 const examples = financeWorkflows
   .filter((w) => w.id in STARTERS)
@@ -240,6 +240,7 @@ export default function ChatWorkspace({
     [manualStarting, setManualStarting] = useState(false),
     [resultsId, setResultsId] = useState('');
   const [limitModel, setLimitModel] = useState(DEFAULT_MODEL);
+  const [draftModel, setDraftModel] = useState<string | undefined>(undefined);
   const [abInput, setAbInput] = useState('');
   const [abPairs, setAbPairs] = useState(2);
   const [allAppsOpen, setAllAppsOpen] = useState(false);
@@ -503,6 +504,7 @@ export default function ChatWorkspace({
           message,
           selectedApps,
           initialize: true,
+          ...(draftModel ? { model: draftModel } : {}),
         });
       }
       selectedId.current = current.chat.id;
@@ -693,9 +695,22 @@ export default function ChatWorkspace({
             )
             .map((c) => c.slug)}
         />
-        <span className="model-label">
-          {integrations?.model ?? 'Model not configured'}
-        </span>
+        <ModelPicker
+          value={chat?.settings.model}
+          fallback={integrations?.model}
+          disabled={busy || Boolean(activeRun)}
+          onChange={(model) => {
+            // Before a workflow exists the choice is held for the one the
+            // composer is about to create; after, it is saved on the workflow.
+            if (!chat) return setDraftModel(model);
+            void act('settings', {
+              target: chat.settings.target,
+              maxIterations: chat.settings.maxIterations,
+              maxToolCalls: chat.settings.maxToolCalls,
+              model,
+            });
+          }}
+        />
         <Button
           className="send-button"
           size="icon"
@@ -1209,6 +1224,36 @@ export default function ChatWorkspace({
                         </span>
                       </div>
                       <TabsContent value="workflow" className="canvas-tab">
+                        {/* The architect writes an explanation on every design
+                            and it was shown nowhere, so opening a workflow gave
+                            you boxes and no statement of what it does. */}
+                        {workflow && (
+                          <div className="workflow-summary">
+                            <h2>{workflow.title}</h2>
+                            <p>{workflow.explanation}</p>
+                            <div className="workflow-summary-facts">
+                              <span>
+                                {workflow.nodes.length} agent
+                                {workflow.nodes.length === 1 ? '' : 's'}
+                              </span>
+                              <span>
+                                {workflow.criteria.length} check
+                                {workflow.criteria.length === 1 ? '' : 's'}
+                              </span>
+                              {[
+                                ...new Set(workflow.nodes.flatMap((n) => n.toolkits)),
+                              ].map((slug) => (
+                                <span key={slug} className="workflow-summary-app">
+                                  <AppIcon slug={slug} size={13} />
+                                  {appDefinition(slug)?.name ?? slug}
+                                </span>
+                              ))}
+                              {!workflow.nodes.some((n) => n.toolkits.length) && (
+                                <span>No connected apps needed</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         {workflow && (
                           <WorkflowCanvas
                             key={chat.id}
@@ -1570,22 +1615,6 @@ export default function ChatWorkspace({
                           onLoading={setReadingDocument}
                           disabled={busy || Boolean(activeRun)}
                         />
-                        {financeWorkflows
-                          .filter((d) => d.title === chat.title && 'sample' in d)
-                          .map((d) => (
-                            <div className="demo-input-actions" key={d.id}>
-                              <a
-                                href={`/demos/${(d as { sample: string }).sample}`}
-                                download
-                              >
-                                Download sample packet
-                              </a>
-                              <small>
-                                Fictional sample data. Replace it with your own
-                                sources.
-                              </small>
-                            </div>
-                          ))}
                         <p className="quiet-text">
                           {(
                             manualInput.length +

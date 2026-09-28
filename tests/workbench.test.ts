@@ -1029,9 +1029,12 @@ function toolAgentModel(
           repairInstructions: 'Retry with the same agents.',
           memories: [],
         }) as ModelResult<T>;
-      // Repair keeps every node byte-identical, so carried schemas stay valid.
-      if (system.startsWith('Repair'))
-        return result(structuredClone(data.workflow)) as ModelResult<T>;
+      // Repair the editor while keeping the tool-using writer unchanged.
+      if (system.startsWith('Repair')) {
+        const repaired=structuredClone(data.workflow);
+        repaired.nodes[1].instruction += ' Verify all requested sections against the source.';
+        return result(repaired) as ModelResult<T>;
+      }
       if (system.startsWith('You are Writer')) {
         const rules = (data.learnedToolRules ?? []).map((r) => r.claim);
         seenRules.push(rules);

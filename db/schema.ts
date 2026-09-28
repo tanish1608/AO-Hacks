@@ -158,3 +158,9 @@ export const agentRunMetrics = sqliteTable(
     index('idx_agent_run_metrics_chat').on(t.ownerId, t.chatId, t.createdAt),
   ],
 );
+
+export const workflowPublications = sqliteTable('workflow_publications', {
+  id:text('id').primaryKey(), ownerId:text('owner_id').notNull(), chatId:text('chat_id').notNull(),
+  payload:text('payload').notNull(), createdAt:text('created_at').notNull(), revoked:integer('revoked').notNull().default(0),
+  uses:integer('uses').notNull().default(0), maxUses:integer('max_uses').notNull().default(10),
+}, t=>[index('idx_publications_owner_chat').on(t.ownerId,t.chatId)]);

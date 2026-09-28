@@ -5,7 +5,7 @@ import {
   startRun,
   advanceChatRun,
 } from '../lib/workbench/engine.ts';
-import { geminiModel } from '../lib/workbench/model.ts';
+import { workbenchModel } from '../lib/workbench/model.ts';
 const local = existsSync('.dev.vars')
   ? Object.fromEntries(
       readFileSync('.dev.vars', 'utf8')
@@ -31,11 +31,7 @@ if (!goal) {
   process.exit(1);
 }
 const deps = {
-  model: geminiModel({
-    key: process.env.GEMINI_API_KEY || local.GEMINI_API_KEY,
-    model:
-      process.env.FOUNDRY_MODEL || local.FOUNDRY_MODEL || 'gemini-3.8-flash',
-  }),
+  model: workbenchModel({ ...local, ...process.env }),
   tools: null,
 };
 let chat = await design(createChat(crypto.randomUUID()), goal, deps, []),

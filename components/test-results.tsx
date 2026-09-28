@@ -130,7 +130,7 @@ export default function TestResults({
                 {
                   run.rubric.filter(
                     (c) => c.assertion && c.assertion.kind !== 'rubric',
-                  ).length
+                  ).length + (run.regressionCase?.checks.length ?? 0)
                 }{' '}
                 deterministic checks. Deterministic results override the judge;
                 required checks and evidence gates must pass. This is a rubric
@@ -191,6 +191,7 @@ export default function TestResults({
                 </details>
               );
             })}
+            {attempt.evaluation?.checks.filter(c=>c.criterionId.startsWith('regression_')).map(c=><details key={c.criterionId} className="rubric-check"><summary><span>{c.rationale}<small>Saved deterministic check</small></span><strong>{c.score===1?'Passed':'Failed'}</strong></summary><p>Frozen before execution and evaluated by code. Model scores cannot override a failure.</p>{c.evidenceIds.map(id=><code key={id}>{id}</code>)}</details>)}
             <h3>Step log</h3>
             {attempt.traces.map((t) => (
               <details className="wb-trace" key={t.id}>

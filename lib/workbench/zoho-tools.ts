@@ -55,12 +55,16 @@ export function isZohoTool(slug: string) {
   return definitions.some(t => t.slug === slug);
 }
 type Request = <T>(path: string, body?: unknown) => Promise<T>;
-type ZohoData = { code?: number; message?: string; [key: string]: any };
+type ZohoLine = { name: string; quantity: number; rate: number; tax_id?: string; discount?: string; description?: string };
+type ZohoInvoice = { invoice_id?: string; invoice_number?: string; status?: string; is_emailed?: boolean; payment_reminder_enabled?: boolean; customer_id?: string; customer_name?: string; currency_code?: string; total?: number; tax_total?: number; reference_number?: string; line_items?: ZohoLine[] };
+type ZohoContact = { contact_id: string; contact_name?: string; currency_id?: string; billing_address?: {address?: string} };
+type ZohoData = { code?: number; message?: string; contacts?: ZohoContact[]; contact?: ZohoContact; invoices?: ZohoInvoice[]; invoice?: ZohoInvoice; [key: string]: unknown };
+type ZohoArgs = { organization_id: string; invoice_id: string; contact_name: string; currency_id: string; billing_address: {address:string}; customer_id: string; reference_number: string; currency_code: string; expected_total: number; expected_tax_total: number; line_items: ZohoLine[] };
 export async function executeZohoTool(request: Request, session: string, slug: string, input: unknown) {
   const definition = definitions.find(t => t.slug === slug);
   if (!definition || !new Validator(definition.schema).validate(input).valid)
     throw new Error('Invalid arguments for the approved Zoho capability');
-  const args = input as Record<string, any>;
+  const args = input as ZohoArgs;
   const proxy = async (path: string, method = 'GET', body?: unknown) => {
     // The currently verified account uses the US API. No caller-controlled host,
     // endpoint, HTTP method or authentication header is exposed to the model.
@@ -79,7 +83,7 @@ export async function executeZohoTool(request: Request, session: string, slug: s
   if (slug === 'FOUNDRY_ZOHO_GET_INVOICE') return proxy(`invoices/${args.invoice_id}?${query}`);
   if (slug === 'FOUNDRY_ZOHO_CREATE_CUSTOMER') {
     const found = await proxy(`contacts?${query}&contact_name=${encodeURIComponent(args.contact_name)}`);
-    const matches = (found.contacts ?? []).filter((c: any) => c.contact_name === args.contact_name);
+    const matches = (found.contacts ?? []).filter((c) => c.contact_name === args.contact_name);
     if (matches.length > 1) throw new Error('Ambiguous customer matches; choose the existing contact explicitly');
     if (matches.length === 1) {
       const detail = await proxy(`contacts/${matches[0].contact_id}?${query}`);
@@ -90,16 +94,17 @@ export async function executeZohoTool(request: Request, session: string, slug: s
     const { organization_id: _org, ...customer } = args;
     return proxy(`contacts?${query}`, 'POST', { ...customer, contact_type: 'customer', is_portal_enabled: false });
   }
-  const verify = (invoice: any) => {
+  const verify = (invoice: ZohoInvoice | undefined) => {
     if (!invoice?.invoice_id || invoice.status !== 'draft' || invoice.is_emailed !== false || invoice.payment_reminder_enabled !== false ||
       String(invoice.customer_id) !== args.customer_id || invoice.currency_code !== args.currency_code ||
       Math.abs(Number(invoice.total) - args.expected_total) > 0.005 ||
       Math.abs(Number(invoice.tax_total) - args.expected_tax_total) > 0.005 ||
       !Number.isFinite(Number(invoice.total)) || !Number.isFinite(Number(invoice.tax_total)))
       throw new Error('Invoice exists but its draft status, customer, currency or totals did not verify. Reconcile before retrying.');
-    if (!Array.isArray(invoice.line_items) || invoice.line_items.length !== args.line_items.length ||
-      args.line_items.some((line: any, index: number) => {
-        const actual = invoice.line_items[index];
+    const actualLines = invoice.line_items;
+    if (!Array.isArray(actualLines) || actualLines.length !== args.line_items.length ||
+      args.line_items.some((line, index) => {
+        const actual = actualLines[index];
         return actual.name !== line.name || Number(actual.quantity) !== line.quantity ||
           Math.abs(Number(actual.rate) - line.rate) > 0.000001 ||
           (line.tax_id && String(actual.tax_id) !== line.tax_id);
@@ -109,10 +114,10 @@ export async function executeZohoTool(request: Request, session: string, slug: s
       customer_id: invoice.customer_id, customer_name: invoice.customer_name,
       status: invoice.status, is_emailed: invoice.is_emailed, payment_reminder_enabled: invoice.payment_reminder_enabled,
       currency_code: invoice.currency_code, total: invoice.total, tax_total: invoice.tax_total,
-      reference_number: invoice.reference_number, line_count: invoice.line_items.length };
+      reference_number: invoice.reference_number, line_count: actualLines.length };
   };
   const existing = await proxy(`invoices?${query}&reference_number=${encodeURIComponent(args.reference_number)}`);
-  const matches = (existing.invoices ?? []).filter((i: any) => i.reference_number === args.reference_number);
+  const matches = (existing.invoices ?? []).filter((i) => i.reference_number === args.reference_number);
   if (matches.length > 1) throw new Error('Multiple invoices share this source reference; reconcile before creating another');
   if (matches.length) {
     const result = await proxy(`invoices/${matches[0].invoice_id}?${query}`);

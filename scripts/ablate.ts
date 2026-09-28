@@ -10,7 +10,7 @@ import {
   design,
   startRun,
 } from '../lib/workbench/engine.ts';
-import { geminiModel } from '../lib/workbench/model.ts';
+import { workbenchModel } from '../lib/workbench/model.ts';
 import { ablation, runMetrics } from '../lib/workbench/metrics.ts';
 import { knowledgeKey, mergeKnowledge, newKnowledge } from '../lib/workbench/tool-knowledge.ts';
 import type {
@@ -63,12 +63,7 @@ const knowledge: Knowledge = {
     }
   },
 };
-const model = geminiModel({
-  key: process.env.GEMINI_API_KEY || local.GEMINI_API_KEY,
-  model: process.env.FOUNDRY_MODEL || local.FOUNDRY_MODEL || 'gemini-3.8-flash',
-  inputPrice: process.env.FOUNDRY_INPUT_PRICE_PER_MILLION || local.FOUNDRY_INPUT_PRICE_PER_MILLION,
-  outputPrice: process.env.FOUNDRY_OUTPUT_PRICE_PER_MILLION || local.FOUNDRY_OUTPUT_PRICE_PER_MILLION,
-});
+const model = workbenchModel({ ...local, ...process.env });
 const deps: Dependencies = { model, tools: null, knowledge };
 console.error('Designing the workflow…');
 let chat: Chat = await design(createChat(crypto.randomUUID()), goal, deps, []);
@@ -115,7 +110,7 @@ console.log(
         'Directional only. One task, one input, small n. Not a significance test and not measured accuracy.',
       goal,
       pairs,
-      model: process.env.FOUNDRY_MODEL || local.FOUNDRY_MODEL || 'gemini-3.8-flash',
+      model: process.env.FOUNDRY_MODEL || local.FOUNDRY_MODEL || 'openai/gpt-4o',
       generatedAt: new Date().toISOString(),
       memoryEntriesUnderTest: memorySnapshot.length,
       // Repair legitimately changes the graph mid-run, so freezing is about the

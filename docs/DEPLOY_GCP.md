@@ -1,10 +1,12 @@
 # Running on Google Cloud
 
+> Retired September 26, 2026: the `agent-foundry` Cloud Run service was deleted at the owner's request. Its final database (13 chats, 29 runs) and service configuration were backed up locally under the ignored `work/startup-revisit-20260926/` directory. Database buckets, container images, Secret Manager entries, and the project remain; no new deployment was created. The commands below document the historical setup, not a running service.
+
 The application is built for Cloudflare Workers with a D1 binding. On Google
 Cloud the same bundle runs on Cloud Run behind a small Node adapter, so there
 is one codebase and one SQL dialect rather than a fork.
 
-- **Live service:** https://agent-foundry-826928184760.us-central1.run.app
+- **Former service:** https://agent-foundry-826928184760.us-central1.run.app
 - **Project:** `ao-hacks` (826928184760), region `us-central1`
 
 ## How the adapter works

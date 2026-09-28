@@ -10,6 +10,8 @@ import { SqliteD1 } from './d1-sqlite.mjs';
 import { assignEnv, env } from './workers-shim.mjs';
 import { migrate } from './migrate.mjs';
 import { restore, scheduleSnapshot, shutdown } from './persistence.mjs';
+import { runtimePolicy } from './runtime-policy.mjs';
+const runtime = runtimePolicy(process.env);
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 const DIST = process.env.DIST_DIR ?? join(root, 'dist');
@@ -29,6 +31,10 @@ const CONFIG = [
   'AUTH_MODE',
   'IAP_AUDIENCE',
   'GEMINI_API_KEY',
+  'OPENROUTER_API_KEY',
+  'OPENROUTER_SITE_URL',
+  'OPENROUTER_APP_NAME',
+  'FOUNDRY_PROVIDER',
   'OPENAI_API_KEY',
   'FOUNDRY_MODEL',
   'FOUNDRY_INPUT_PRICE_PER_MILLION',
@@ -95,7 +101,7 @@ const server = createServer(async (req, res) => {
     res.end('Internal error');
   }
 });
-server.listen(PORT, '0.0.0.0', () =>
+server.listen(PORT, runtime.host, () =>
   console.log(`agent-foundry listening on ${PORT}`),
 );
 let closing = false;

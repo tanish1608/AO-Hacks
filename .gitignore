@@ -35,6 +35,8 @@ next-env.d.ts
 /dist/
 /.wrangler/
 /outputs/
+/.data/
+*.tsbuildinfo
 /work/
 .dev.vars*
 !.env.example

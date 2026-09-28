@@ -17,6 +17,7 @@ function grams(text: string, n = GRAM) {
 /** Everything a claim is forbidden to echo: inputs, outputs, tool arguments, user turns. */
 export function taskCorpus(chat: Chat, run: Run, attempt: Attempt): string {
   const parts: string[] = [chat.title, run.input ?? '', run.inputExplanation ?? ''];
+  parts.push(...(chat.rules ?? []), ...(run.rules ?? []));
   for (const m of chat.messages) if (m.role === 'user' || m.kind === 'agent_result') parts.push(m.content);
   for (const s of attempt.states) parts.push(s.output, s.error ?? '');
   for (const t of attempt.traces) {

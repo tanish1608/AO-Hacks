@@ -16,11 +16,15 @@ import {
   Plus,
   RotateCcw,
   Settings2,
-  ShieldCheck,
   TrendingUp,
   X,
 } from 'lucide-react';
 import DocumentInput from './document-input';
+import WorkflowRules from './workflow-rules';
+import WorkflowTests from './workflow-tests';
+import WorkflowPublish from './workflow-publish';
+import ActionReview from './action-review';
+import { type WorkflowRow } from '@/lib/workbench/workspace';
 import financeDemos from '@/lib/workbench/finance-demos.json';
 import { zohoInvoiceStarter } from '@/lib/workbench/starter-prompts';
 import { combineRunInput, type InputDocument } from '@/lib/workbench/documents';
@@ -76,10 +80,12 @@ type Snapshot = {
   metrics?: RunMetric[];
   knowledge?: ToolKnowledgeRecord[];
 };
-type ChatRow = { id: string; title: string; updated_at: string };
+type ChatRow = WorkflowRow;
 type Integrations = {
   model: string;
   gemini: boolean;
+  configured: boolean;
+  provider: string;
   composio: boolean;
   langsmith: boolean;
   pricing: boolean;
@@ -140,7 +146,7 @@ const examples = [
     description: 'Connect issues, context, and decisions.',
     prompt:
       'Build agents that read GitHub project issues and pull requests, identify release blockers and their owners, and prepare a source-linked weekly status report. I will provide the repository.',
-  }
+  },
 ];
 function TaskButton({
   onClick,
@@ -240,7 +246,6 @@ export default function ChatWorkspace() {
     [readingDocument, setReadingDocument] = useState(false),
     [manualStarting, setManualStarting] = useState(false),
     [resultsId, setResultsId] = useState('');
-  const [reconciliation, setReconciliation] = useState('');
   const [abInput, setAbInput] = useState('');
   const [abPairs, setAbPairs] = useState(2);
   const [allAppsOpen, setAllAppsOpen] = useState(false);
@@ -264,12 +269,26 @@ export default function ChatWorkspace() {
   const manualRun = run?.mode === 'manual' ? run : manualRuns[0];
   const attempt = manualRun?.attempts.at(-1);
   const workflow = chat?.versions.at(-1)?.workflow;
-  const requiredApps = [...new Set(workflow?.nodes.flatMap((n) => n.toolkits) ?? [])]
-    .map(appDefinition).filter((a): a is NonNullable<typeof a> => Boolean(a && !a.noAuth));
-  const missingApps = requiredApps.filter((a) => !integrations?.connections.some((c) =>
-    c.slug === a.slug && (c.connection?.is_active || c.connection?.isActive || c.connection?.connected_account?.status === 'ACTIVE')));
-  const waitingForConnections = requiredApps.length > 0 &&
-    (!integrations || Boolean(integrations.connectionError) || missingApps.length > 0);
+  const requiredApps = [
+    ...new Set(workflow?.nodes.flatMap((n) => n.toolkits) ?? []),
+  ]
+    .map(appDefinition)
+    .filter((a): a is NonNullable<typeof a> => Boolean(a && !a.noAuth));
+  const missingApps = requiredApps.filter(
+    (a) =>
+      !integrations?.connections.some(
+        (c) =>
+          c.slug === a.slug &&
+          (c.connection?.is_active ||
+            c.connection?.isActive ||
+            c.connection?.connected_account?.status === 'ACTIVE'),
+      ),
+  );
+  const waitingForConnections =
+    requiredApps.length > 0 &&
+    (!integrations ||
+      Boolean(integrations.connectionError) ||
+      missingApps.length > 0);
   const liveAttempt =
     attempt && JSON.stringify(attempt.workflow) === JSON.stringify(workflow)
       ? attempt
@@ -282,7 +301,7 @@ export default function ChatWorkspace() {
     const r = await api<Integrations>('/api/integrations');
     if (mounted.current) setIntegrations(r);
   }, []);
-  const openChat = useCallback(async (id: string) => {
+  const openChat = useCallback(async (id: string, preferredRunId?: string) => {
     if (inFlight.current) return;
     setAuto(false);
     selectedId.current = id;
@@ -292,12 +311,23 @@ export default function ChatWorkspace() {
     setError('');
     try {
       const data = await api<Snapshot>(`/api/chats/${id}`);
+      if (data.chat.sourceShare && selectedId.current === id) {
+        window.location.assign(
+          `/w/${encodeURIComponent(data.chat.sourceShare)}?session=${encodeURIComponent(id)}`,
+        );
+        return;
+      }
       if (selectedId.current === id) {
         setSnapshot(data);
         rememberTask(data.chat.id);
         setSelectedApps(data.chat.selectedApps ?? []);
         setMobileView('chat');
-        setSelectedRunId('');
+        setSelectedRunId(preferredRunId ?? '');
+        setTab(
+          data.runs.find((r) => r.id === preferredRunId)?.mode === 'manual'
+            ? 'manual'
+            : 'workflow',
+        );
         setAuto(
           data.runs.some((r) => r.mode !== 'manual' && r.status === 'running'),
         );
@@ -492,7 +522,14 @@ export default function ChatWorkspace() {
     }
   }
   useEffect(() => {
-    if (!auto || busy || run?.status !== 'running' || inFlight.current || waitingForConnections) return;
+    if (
+      !auto ||
+      busy ||
+      run?.status !== 'running' ||
+      inFlight.current ||
+      waitingForConnections
+    )
+      return;
     const timer = setTimeout(() => void act('advance'), 250);
     return () => clearTimeout(timer);
   });
@@ -638,7 +675,7 @@ export default function ChatWorkspace() {
             .map((c) => c.slug)}
         />
         <span className="model-label">
-          {integrations?.model ?? 'gemini-3.8-flash'}
+          {integrations?.model ?? 'Model not configured'}
         </span>
         <Button
           className="send-button"
@@ -652,84 +689,17 @@ export default function ChatWorkspace() {
       </div>
     </form>
   );
-  const actionReview = (
-    <>
-      {run?.pending &&
-        ['awaiting_approval', 'executing', 'unknown'].includes(
-          run.pending.status,
-        ) && (
-          <div className="action-review">
-            <div>
-              <ShieldCheck size={17} />
-              <strong>Review external action</strong>
-            </div>
-            <p>{run.pending.description}</p>
-            <code>{run.pending.tool.slug}</code>
-            <details>
-              <summary>View exact arguments</summary>
-              <pre>{JSON.stringify(run.pending.arguments, null, 2)}</pre>
-            </details>
-            {run.pending.status !== 'awaiting_approval' && (
-              <div className="reconcile-form">
-                <label htmlFor="wb-field-1" className="field-label">
-                  Verify the outcome in the connected app
-                  <Textarea
-                    id="wb-field-1"
-                    value={reconciliation}
-                    onChange={(e) => setReconciliation(e.target.value)}
-                    placeholder="What happened? Include the resource link or result you checked."
-                    maxLength={3000}
-                  />
-                </label>
-                <Button
-                  size="sm"
-                  disabled={busy || reconciliation.trim().length < 10}
-                  onClick={() =>
-                    void act('reconcile', {
-                      pendingId: run.pending?.id,
-                      note: reconciliation,
-                    }).then((data) => {
-                      if (data) setReconciliation('');
-                    })
-                  }
-                >
-                  Record verified outcome & stop
-                </Button>
-              </div>
-            )}
-            <footer>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy || run.pending.status !== 'awaiting_approval'}
-                onClick={() => void act('reject')}
-              >
-                Decline
-              </Button>
-              <Button
-                size="sm"
-                disabled={busy || run.pending.status !== 'awaiting_approval'}
-                onClick={() =>
-                  void act('approve', {
-                    pendingId: run.pending?.id,
-                  }).then((data) => {
-                    if (data) setAuto(true);
-                  })
-                }
-              >
-                Approve & execute
-              </Button>
-            </footer>
-            {run.pending.status === 'executing' && (
-              <p>
-                Dispatch was checkpointed. Reconcile in the app if the response
-                was interrupted; it will not automatically replay.
-              </p>
-            )}
-          </div>
-        )}
-    </>
-  );
+  const actionReview = run?.pending ? (
+    <ActionReview
+      run={run}
+      busy={busy}
+      onAction={async (action, body) => {
+        const data = await act(action, body);
+        if (data && action === 'approve') setAuto(true);
+        return data;
+      }}
+    />
+  ) : null;
   return (
     <SidebarProvider
       className="wb-shell"
@@ -744,7 +714,6 @@ export default function ChatWorkspace() {
             <span>
               foundry<span className="brand-dot">.</span>
             </span>
-            <span className="preview-label">LAB</span>
           </button>
           <TaskActionButton
             className="new-chat"
@@ -753,24 +722,13 @@ export default function ChatWorkspace() {
             disabled={busy}
           >
             <Plus size={16} />
-            New task
+            New workflow
           </TaskActionButton>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel>Your workspace</SidebarGroupLabel>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <TaskButton onClick={newChat} isActive={!chat}>
-                  <MessageSquare />
-                  <span>Agent studio</span>
-                </TaskButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroup>
           <SidebarGroup className="chat-list">
             <SidebarGroupLabel>
-              Recent tasks <span>{rows.length}</span>
+              Recent workflows <span>{rows.length}</span>
             </SidebarGroupLabel>
             <SidebarMenu>
               {rows.map((row) => (
@@ -789,7 +747,7 @@ export default function ChatWorkspace() {
             </SidebarMenu>
             {!rows.length && (
               <p className="sidebar-empty">
-                Your agents start with a conversation.
+                Save a process you want to use again.
               </p>
             )}
           </SidebarGroup>
@@ -814,7 +772,9 @@ export default function ChatWorkspace() {
       <main className="wb-main">
         <header className="wb-header">
           <SidebarTrigger />
-          <span className="header-breadcrumb">Agent studio</span>
+          <span className="header-breadcrumb">
+            {chat ? 'Workflow' : 'New workflow'}
+          </span>
           {chat && (
             <>
               <ChevronRight size={13} />
@@ -822,6 +782,13 @@ export default function ChatWorkspace() {
             </>
           )}
           <div className="header-right">
+            {chat && workflow && (
+              <WorkflowPublish
+                key={chat.id}
+                chat={chat}
+                disabled={busy || Boolean(activeRun)}
+              />
+            )}
             {chat && workflow && (
               <Button
                 variant="ghost"
@@ -865,13 +832,13 @@ export default function ChatWorkspace() {
           </div>
         )}
         {!chat ? (
-          <div className="wb-home" style={{ paddingTop: '35%' }}>
+          <div className="wb-home">
             <div className="home-intro">
-              <h1>What are we working on?</h1>
+              <h1>What work do you want to repeat?</h1>
               <p>
-                Describe a task. We’ll build the workflow, test its output,
-                <br className="desktop-break" /> and work through improvements
-                here with you.
+                Describe the input, the result you need, and any exceptions.
+                <br className="desktop-break" /> We’ll build a workflow you can
+                test and reuse.
               </p>
             </div>
             <div className="home-compose">{composer}</div>
@@ -891,14 +858,30 @@ export default function ChatWorkspace() {
                 </button>
               ))}
             </div>
-            <section className="finance-demo-gallery" aria-label="Finance demos">
-              <h2>Try a finance workflow</h2>
-              <p>Synthetic Excel inputs. Invoice creation requires Zoho Books; the other examples run without connected apps.</p>
-              {financeStarters.map((d) => <div key={d.id}>
-                <Button variant="ghost" onClick={() => { setDraft(d.prompt); setSelectedApps(d.apps); }}><FileText size={16} />{d.title}</Button>
-                <a href={`/demos/${d.id}.xlsx`} download>Download Excel input</a>
-              </div>)}
-            </section>
+            <details className="finance-demo-gallery">
+              <summary>Start from a finance example</summary>
+              <p>
+                Practice with sample Excel files. Creating invoice drafts
+                requires Zoho Books; the other examples use documents only.
+              </p>
+              {financeStarters.map((d) => (
+                <div key={d.id}>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setDraft(d.prompt);
+                      setSelectedApps(d.apps);
+                    }}
+                  >
+                    <FileText size={16} />
+                    {d.title}
+                  </Button>
+                  <a href={`/demos/${d.id}.xlsx`} download>
+                    Download Excel input
+                  </a>
+                </div>
+              ))}
+            </details>
           </div>
         ) : (
           <ResizablePanelGroup
@@ -947,16 +930,42 @@ export default function ChatWorkspace() {
                       <div className="message-content connection-prompt">
                         <small>Foundry</small>
                         <h3>Connect the apps this workflow needs</h3>
-                        <p>{activeRun ? 'The run waits here while you connect your accounts. Your workflow and input are saved.' : 'Connect these accounts before your next run. Your existing workflow and results are saved.'}</p>
-                        {integrations?.connectionError ? <p role="alert">Could not verify connections. Refresh to try again.</p> : missingApps.map((a) => (
-                          <Button key={a.slug} variant="outline" disabled={busy || !integrations?.composio} onClick={() => void connect(a.slug)}>
-                            <AppIcon slug={a.slug} /> Connect {a.name}
-                          </Button>
-                        ))}
-                        <Button variant="ghost" disabled={busy} onClick={() => void refreshIntegrations().catch((e) => setError(e.message))}>
+                        <p>
+                          {activeRun
+                            ? 'The run waits here while you connect your accounts. Your workflow and input are saved.'
+                            : 'Connect these accounts before your next run. Your existing workflow and results are saved.'}
+                        </p>
+                        {integrations?.connectionError ? (
+                          <p role="alert">
+                            Could not verify connections. Refresh to try again.
+                          </p>
+                        ) : (
+                          missingApps.map((a) => (
+                            <Button
+                              key={a.slug}
+                              variant="outline"
+                              disabled={busy || !integrations?.composio}
+                              onClick={() => void connect(a.slug)}
+                            >
+                              <AppIcon slug={a.slug} /> Connect {a.name}
+                            </Button>
+                          ))
+                        )}
+                        <Button
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() =>
+                            void refreshIntegrations().catch((e) =>
+                              setError(e.message),
+                            )
+                          }
+                        >
                           <RotateCcw size={14} /> Check connections
                         </Button>
-                        <p className="quiet-text">Using uploaded files instead? Stop the current test, then ask in chat to use documents only.</p>
+                        <p className="quiet-text">
+                          Using uploaded files instead? Stop the current test,
+                          then ask in chat to use documents only.
+                        </p>
                       </div>
                     </article>
                   )}
@@ -1020,7 +1029,7 @@ export default function ChatWorkspace() {
                         {testRun.error ??
                           (testRun.status === 'running'
                             ? 'Checking the output and improving failed steps.'
-                            : 'Tell me what to change, or run this architecture with your own input in the workflow panel.')}
+                            : 'Tell me what to change, or run this workflow with your own input in the workflow panel.')}
                       </p>
                       <Button
                         size="sm"
@@ -1039,14 +1048,6 @@ export default function ChatWorkspace() {
                   {!designing && workflow && (
                     <div className="chat-test-controls">
                       <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy || Boolean(activeRun)}
-                        onClick={() => void act('recovery-checks')}
-                      >
-                        Recovery checks
-                      </Button>
-                      <Button
                         size="icon-sm"
                         variant="ghost"
                         aria-label="Test limits"
@@ -1064,7 +1065,7 @@ export default function ChatWorkspace() {
                       <span>
                         {activeRun
                           ? `Attempt ${activeRun.attempts.length} of ${activeRun.maxIterations}`
-                          : `${workflow?.nodes.length ?? 0} agents · target ${percent(chat.settings.target)}`}
+                          : `${workflow?.nodes.length ?? 0} steps · test target ${percent(chat.settings.target)}`}
                       </span>
                       {activeRun && activeRun.mode !== 'manual' ? (
                         <>
@@ -1138,9 +1139,9 @@ export default function ChatWorkspace() {
                         <GitBranch size={16} />
                       </span>
                       <div>
-                        <strong>Agent workflow</strong>
+                        <strong>Workflow</strong>
                         <small>
-                          {workflow?.nodes.length ?? 0} agents · version{' '}
+                          {workflow?.nodes.length ?? 0} steps · version{' '}
                           {chat.versions.length}
                         </small>
                       </div>
@@ -1169,11 +1170,16 @@ export default function ChatWorkspace() {
 
                           <TabsTrigger value="learning">
                             <TrendingUp size={13} />
-                            Learning<span>{knowledge.length}</span>
+                            Insights<span>{knowledge.length}</span>
                           </TabsTrigger>
+                          <TabsTrigger value="rules">
+                            <FileText size={13} />
+                            Rules
+                          </TabsTrigger>
+                          <TabsTrigger value="tests">Tests</TabsTrigger>
                           <TabsTrigger value="manual">
                             <Play size={13} />
-                            My runs<span>{manualRuns.length}</span>
+                            Runs<span>{manualRuns.length}</span>
                           </TabsTrigger>
                         </TabsList>
                         <span className="saved-label">
@@ -1198,9 +1204,31 @@ export default function ChatWorkspace() {
                           <span>Click to inspect · drag to arrange</span>
                         </div>
                       </TabsContent>
+                      <TabsContent value="tests" className="detail-tab">
+                        <WorkflowTests
+                          key={chat.id}
+                          chat={chat}
+                          disabled={busy || Boolean(activeRun)}
+                          onResults={setResultsId}
+                          onAction={async (action, body) => {
+                            const data = await act(action, body);
+                            if (
+                              data &&
+                              action === 'improvement' &&
+                              body.operation === 'start'
+                            ) {
+                              setSelectedRunId(data.runs[0]?.id ?? '');
+                              setAuto(true);
+                            }
+                            return data;
+                          }}
+                        />
+                      </TabsContent>
                       <TabsContent value="learning" className="detail-tab">
                         <div className="section-intro">
-                          <span className="eyebrow">HOW THIS AGENT IMPROVES</span>
+                          <span className="eyebrow">
+                            HOW THIS AGENT IMPROVES
+                          </span>
                           <h2>Learning</h2>
                           <p>
                             Task memory stays inside this task. What the agents
@@ -1280,8 +1308,8 @@ export default function ChatWorkspace() {
                             </div>
                             <p className="quiet-text">
                               A rubric score is a judged result against this
-                              task’s frozen checks, not measured accuracy. Hollow
-                              points are runs with memory switched off.
+                              task’s frozen checks, not measured accuracy.
+                              Hollow points are runs with memory switched off.
                             </p>
                           </>
                         )}
@@ -1335,16 +1363,17 @@ export default function ChatWorkspace() {
                         <div className="section-intro learning-section">
                           <h2>Does memory actually help?</h2>
                           <p>
-                            Runs the same input with task memory on and off, on a
-                            frozen graph. Tool knowledge stays fixed in both arms. Arms run
-                            one at a time and stay out of the conversation.
+                            Runs the same input with task memory on and off, on
+                            a frozen graph. Tool knowledge stays fixed in both
+                            arms. Arms run one at a time and stay out of the
+                            conversation.
                           </p>
                         </div>
                         {experiment && experiment.status === 'running' ? (
                           <div className="ab-progress">
                             <span>
-                              Arm {finishedArms + 1} of{' '}
-                              {experiment.arms.length} ·{' '}
+                              Arm {finishedArms + 1} of {experiment.arms.length}{' '}
+                              ·{' '}
                               {experiment.arms.find(
                                 (a) => a.status === 'running',
                               )?.useMemory
@@ -1374,7 +1403,10 @@ export default function ChatWorkspace() {
                           </div>
                         ) : (
                           <>
-                            <label className="field-label" htmlFor="wb-ab-input">
+                            <label
+                              className="field-label"
+                              htmlFor="wb-ab-input"
+                            >
                               One fixed input, used by every arm
                               <Textarea
                                 id="wb-ab-input"
@@ -1467,13 +1499,23 @@ export default function ChatWorkspace() {
                             />
                             <p className="quiet-text">
                               {armResult.nPerArm} run
-                              {armResult.nPerArm === 1 ? '' : 's'} per arm on one
-                              input. Directional only — this is not a
-                              significance test, and a null result is reported as
-                              a null result.
+                              {armResult.nPerArm === 1 ? '' : 's'} per arm on
+                              one input. Directional only — this is not a
+                              significance test, and a null result is reported
+                              as a null result.
                             </p>
                           </div>
                         )}
+                      </TabsContent>
+                      <TabsContent value="rules" className="detail-tab">
+                        <WorkflowRules
+                          key={chat.id}
+                          rules={chat.rules ?? []}
+                          disabled={busy || Boolean(activeRun)}
+                          onSave={async (rules) =>
+                            Boolean(await act('rules', { rules }))
+                          }
+                        />
                       </TabsContent>
                       <TabsContent
                         value="manual"
@@ -1482,15 +1524,15 @@ export default function ChatWorkspace() {
                         <div className="section-intro">
                           <h2>Run with your input</h2>
                           <p>
-                            Use the current architecture on your own content.
-                            This executes once and keeps the output here.
+                            Use this workflow on your own content. This executes
+                            once and keeps the output here.
                           </p>
                         </div>
                         <label
                           className="field-label"
                           htmlFor="manual-run-input"
                         >
-                          Input for the first agent
+                          Documents or details to process
                           <Textarea
                             id="manual-run-input"
                             value={manualInput}
@@ -1507,21 +1549,64 @@ export default function ChatWorkspace() {
                           onLoading={setReadingDocument}
                           disabled={busy || Boolean(activeRun)}
                         />
-                        {financeDemos.filter((d) => d.title === chat.title || financeStarters.find((starter) => starter.id === d.id)?.title === chat.title).map((d) => <div className="demo-input-actions" key={d.id}>
-                          <Button variant="outline" disabled={busy || Boolean(activeRun) || readingDocument} onClick={async () => {
-                            setReadingDocument(true);
-                            try {
-                              const response = await fetch(`/demos/${d.id}.xlsx`);
-                              if (!response.ok) throw new Error('Could not load the demo workbook.');
-                              const bytes = new Uint8Array(await response.arrayBuffer());
-                              const { extractWorkbook } = await import('@/lib/workbench/xlsx-input');
-                              setInputDocuments([{name:`${d.id}.xlsx`,size:bytes.length,text:extractWorkbook(bytes)}]);
-                              setManualInput('Process the attached synthetic workbook. Return the complete deliverable and exceptions.');
-                            } catch(e) {setError(e instanceof Error ? e.message : 'Could not read workbook');}
-                            finally {setReadingDocument(false);}
-                          }}>Use demo Excel input</Button>
-                          <a href={`/demos/${d.id}.xlsx`} download>Download workbook</a>
-                        </div>)}
+                        {financeDemos
+                          .filter(
+                            (d) =>
+                              d.title === chat.title ||
+                              financeStarters.find(
+                                (starter) => starter.id === d.id,
+                              )?.title === chat.title,
+                          )
+                          .map((d) => (
+                            <div className="demo-input-actions" key={d.id}>
+                              <Button
+                                variant="outline"
+                                disabled={
+                                  busy || Boolean(activeRun) || readingDocument
+                                }
+                                onClick={async () => {
+                                  setReadingDocument(true);
+                                  try {
+                                    const response = await fetch(
+                                      `/demos/${d.id}.xlsx`,
+                                    );
+                                    if (!response.ok)
+                                      throw new Error(
+                                        'Could not load the demo workbook.',
+                                      );
+                                    const bytes = new Uint8Array(
+                                      await response.arrayBuffer(),
+                                    );
+                                    const { extractWorkbook } =
+                                      await import('@/lib/workbench/xlsx-input');
+                                    setInputDocuments([
+                                      {
+                                        name: `${d.id}.xlsx`,
+                                        size: bytes.length,
+                                        text: extractWorkbook(bytes),
+                                      },
+                                    ]);
+                                    setManualInput(
+                                      'Process the attached synthetic workbook. Return the complete deliverable and exceptions.',
+                                    );
+                                  } catch (e) {
+                                    setError(
+                                      e instanceof Error
+                                        ? e.message
+                                        : 'Could not read workbook',
+                                    );
+                                  } finally {
+                                    setReadingDocument(false);
+                                  }
+                                }}
+                              >
+                                Use demo Excel input
+                              </Button>
+                              <a href={`/demos/${d.id}.xlsx`} download>
+                                Download workbook
+                              </a>
+                            </div>
+                          ))}
                         <p className="quiet-text">
                           {(
                             manualInput.length +
@@ -1621,13 +1706,39 @@ export default function ChatWorkspace() {
                                 tokens · {money(manualRun.usage.costUsd)}
                               </span>
                             </div>
-                            {manualRun.status === 'completed' && <Button variant="outline" size="sm" onClick={() => {
-                              const last = manualRun.attempts.at(-1)!;
-                              const output = last.states.filter((s) => !last.workflow.nodes.some((n) => n.dependsOn.includes(s.nodeId))).map((s) => s.output).join('\n\n');
-                              const url = URL.createObjectURL(new Blob([output], {type:'text/markdown;charset=utf-8'}));
-                              const a = document.createElement('a'); a.href=url; a.download=`foundry-output-${manualRun.id.slice(0,8)}.md`; a.click();
-                              setTimeout(() => URL.revokeObjectURL(url), 1000);
-                            }}>Download final output</Button>}
+                            {manualRun.status === 'completed' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const last = manualRun.attempts.at(-1)!;
+                                  const output = last.states
+                                    .filter(
+                                      (s) =>
+                                        !last.workflow.nodes.some((n) =>
+                                          n.dependsOn.includes(s.nodeId),
+                                        ),
+                                    )
+                                    .map((s) => s.output)
+                                    .join('\n\n');
+                                  const url = URL.createObjectURL(
+                                    new Blob([output], {
+                                      type: 'text/markdown;charset=utf-8',
+                                    }),
+                                  );
+                                  const a = document.createElement('a');
+                                  a.href = url;
+                                  a.download = `foundry-output-${manualRun.id.slice(0, 8)}.md`;
+                                  a.click();
+                                  setTimeout(
+                                    () => URL.revokeObjectURL(url),
+                                    1000,
+                                  );
+                                }}
+                              >
+                                Download final output
+                              </Button>
+                            )}
                             {manualRun.error && (
                               <p role="alert">{manualRun.error}</p>
                             )}
@@ -1937,122 +2048,134 @@ export default function ChatWorkspace() {
             </>
           ) : (
             <>
-          <div className="provider-setting">
-            <span className="provider-icon">
-              <AudioLines size={22} />
-            </span>
-            <div>
-              <strong>Gemini</strong>
-              <small>{integrations?.model ?? 'gemini-3.8-flash'}</small>
-            </div>
-            <span
-              className={
-                integrations?.gemini ? 'provider-ready' : 'provider-missing'
-              }
-            >
-              {integrations?.gemini ? 'Connected' : 'Not configured'}
-            </span>
-          </div>
-          <div className="settings-section">
-            <header>
-              <strong>Apps through Composio</strong>
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                aria-label="Refresh connections"
-                onClick={() =>
-                  void refreshIntegrations().catch((e) => setError(e.message))
-                }
-              >
-                <RotateCcw size={13} />
-              </Button>
-            </header>
-            <p>
-              Each account is scoped to you. Agents discover available actions
-              when they run.
-            </p>
-            {!integrations?.composio && (
-              <div className="setup-note">
-                Composio isn’t configured for this workspace yet.
+              <div className="provider-setting">
+                <span className="provider-icon">
+                  <AudioLines size={22} />
+                </span>
+                <div>
+                  <strong>
+                    {integrations?.provider === 'openrouter'
+                      ? 'OpenRouter'
+                      : 'Gemini'}
+                  </strong>
+                  <small>{integrations?.model ?? 'Model not configured'}</small>
+                </div>
+                <span
+                  className={
+                    integrations?.configured
+                      ? 'provider-ready'
+                      : 'provider-missing'
+                  }
+                >
+                  {integrations?.configured ? 'Connected' : 'Not configured'}
+                </span>
               </div>
-            )}
-            {integrations?.connectionError && (
-              <p className="evaluation-issue">{integrations.connectionError}</p>
-            )}
-            <div className="connection-list">
-              {featuredApps.map((app) => {
-                const c = integrations?.connections.find(
-                  (c) => c.slug === app.slug,
-                );
-                const connected =
-                  c?.connection?.is_active ||
-                  c?.connection?.isActive ||
-                  c?.connection?.connected_account?.status === 'ACTIVE';
-                return (
-                  <div key={app.slug}>
-                    <AppIcon slug={app.slug} />
-                    <span>
-                      <strong>{app.name}</strong>
-                      <small>
-                        {app.noAuth
-                          ? 'Ready · no account needed'
-                          : connected
-                            ? 'Connected'
-                            : 'Account not connected'}
-                      </small>
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={busy || !integrations?.composio || app.noAuth}
-                      onClick={() => void connect(app.slug)}
-                    >
-                      {app.noAuth
-                        ? 'Ready'
-                        : connected
-                          ? 'Reconnect'
-                          : 'Connect'}
-                      <ArrowUpRight size={12} />
-                    </Button>
+              <div className="settings-section">
+                <header>
+                  <strong>Apps through Composio</strong>
+                  <Button
+                    size="icon-xs"
+                    variant="ghost"
+                    aria-label="Refresh connections"
+                    onClick={() =>
+                      void refreshIntegrations().catch((e) =>
+                        setError(e.message),
+                      )
+                    }
+                  >
+                    <RotateCcw size={13} />
+                  </Button>
+                </header>
+                <p>
+                  Each account is scoped to you. Agents discover available
+                  actions when they run.
+                </p>
+                {!integrations?.composio && (
+                  <div className="setup-note">
+                    Composio isn’t configured for this workspace yet.
                   </div>
-                );
-              })}
-            </div>
-            <button
-              style={{ paddingTop: '20px' }}
-              type="button"
-              className="see-all-apps"
-              onClick={() => {
-                setAppQuery('');
-                setAppLimit(120);
-                setAllAppsOpen(true);
-              }}
-            >
-              {/* <Layers3 size={14} /> */}
-              See all {ALL_APPS.length.toLocaleString()} apps
-              {/* <ArrowUpRight size={12} /> */}
-            </button>
-          </div>
-          <div className="settings-section">
-            <header>
-              <strong>Observability</strong>
-              <span
-                className={
-                  integrations?.langsmith
-                    ? 'provider-ready'
-                    : 'provider-missing'
-                }
-              >
-                {integrations?.langsmith
-                  ? 'LangSmith configured'
-                  : 'Local traces enabled'}
-              </span>
-            </header>
-            <p>
-              Tokens and durations come from actual calls. Dollar estimates
-              require model pricing. App fees are separate.
-            </p>
-          </div>
+                )}
+                {integrations?.connectionError && (
+                  <p className="evaluation-issue">
+                    {integrations.connectionError}
+                  </p>
+                )}
+                <div className="connection-list">
+                  {featuredApps.map((app) => {
+                    const c = integrations?.connections.find(
+                      (c) => c.slug === app.slug,
+                    );
+                    const connected =
+                      c?.connection?.is_active ||
+                      c?.connection?.isActive ||
+                      c?.connection?.connected_account?.status === 'ACTIVE';
+                    return (
+                      <div key={app.slug}>
+                        <AppIcon slug={app.slug} />
+                        <span>
+                          <strong>{app.name}</strong>
+                          <small>
+                            {app.noAuth
+                              ? 'Ready · no account needed'
+                              : connected
+                                ? 'Connected'
+                                : 'Account not connected'}
+                          </small>
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={
+                            busy || !integrations?.composio || app.noAuth
+                          }
+                          onClick={() => void connect(app.slug)}
+                        >
+                          {app.noAuth
+                            ? 'Ready'
+                            : connected
+                              ? 'Reconnect'
+                              : 'Connect'}
+                          <ArrowUpRight size={12} />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button
+                  style={{ paddingTop: '20px' }}
+                  type="button"
+                  className="see-all-apps"
+                  onClick={() => {
+                    setAppQuery('');
+                    setAppLimit(120);
+                    setAllAppsOpen(true);
+                  }}
+                >
+                  {/* <Layers3 size={14} /> */}
+                  See all {ALL_APPS.length.toLocaleString()} apps
+                  {/* <ArrowUpRight size={12} /> */}
+                </button>
+              </div>
+              <div className="settings-section">
+                <header>
+                  <strong>Observability</strong>
+                  <span
+                    className={
+                      integrations?.langsmith
+                        ? 'provider-ready'
+                        : 'provider-missing'
+                    }
+                  >
+                    {integrations?.langsmith
+                      ? 'LangSmith configured'
+                      : 'Local traces enabled'}
+                  </span>
+                </header>
+                <p>
+                  Tokens and durations come from actual calls. Dollar estimates
+                  require model pricing. App fees are separate.
+                </p>
+              </div>
             </>
           )}
         </DialogContent>

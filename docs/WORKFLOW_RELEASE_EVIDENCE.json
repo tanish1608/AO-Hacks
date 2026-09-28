@@ -1,0 +1,2032 @@
+{
+  "scope": "Synthetic document-only fixture; development tests, not a benchmark",
+  "initial_rejected": {
+    "chatId": "4cf01216-21e9-4885-bb61-e403239224f0",
+    "suite": {
+      "id": "e73918ba-d303-4609-9a6d-2e751d520205",
+      "status": "failed",
+      "baseDigest": "1425d1e4a758ae2b47a582a5cffcafa772ab496999de6aa08866bb9a10356054",
+      "baseRules": [],
+      "rules": [
+        "If billing_address is missing, set status to held. Never invent a billing address."
+      ],
+      "candidate": {
+        "title": "Invoice calculation \u2014 saved regression demo",
+        "explanation": "Calculate a document-only invoice summary and flag missing billing addresses. Return one JSON object, with subtotal, tax, total and status. Never connect to external apps.",
+        "nodes": [
+          {
+            "id": "calculator",
+            "name": "Invoice calculator",
+            "role": "Calculate discounted totals and flag exceptions",
+            "instruction": "Read the input order. Compute subtotal = quantity * unit_price - line_discount; tax = subtotal * tax_rate; total = subtotal + tax. Round monetary values to two decimals. Return only a JSON object with numeric subtotal, tax, total and a status field. Use draft status unless an approved business rule requires a hold.",
+            "toolkits": [],
+            "dependsOn": []
+          }
+        ],
+        "criteria": [
+          {
+            "id": "grounded",
+            "name": "Source grounding",
+            "description": "Use only supplied order values and business rules; do not invent data or external actions.",
+            "weight": 1,
+            "required": true
+          },
+          {
+            "id": "json",
+            "name": "Complete JSON",
+            "description": "Return a JSON object containing subtotal, tax, total and status.",
+            "weight": 1,
+            "required": true
+          }
+        ]
+      },
+      "cases": [
+        {
+          "id": "discount",
+          "name": "Tax after a line discount",
+          "input": "quantity: 2; unit_price: 100; line_discount: 20; tax_rate: 0.10; billing_address: 10 Example Street.",
+          "checks": [
+            {
+              "kind": "json_number",
+              "value": "180",
+              "path": "subtotal"
+            },
+            {
+              "kind": "json_number",
+              "value": "18",
+              "path": "tax"
+            },
+            {
+              "kind": "json_number",
+              "value": "198",
+              "path": "total"
+            }
+          ]
+        },
+        {
+          "id": "hold",
+          "name": "Missing billing address",
+          "input": "quantity: 1; unit_price: 50; line_discount: 5; tax_rate: 0.20; billing_address: missing.",
+          "checks": [
+            {
+              "kind": "json_number",
+              "value": "54",
+              "path": "total"
+            },
+            {
+              "kind": "contains",
+              "value": "held"
+            }
+          ]
+        }
+      ],
+      "index": 0,
+      "round": 1,
+      "maxRounds": 3,
+      "results": [
+        {
+          "caseId": "discount",
+          "runId": "aa29d7cc-83ee-4ac7-ac97-5eff63a3676e",
+          "round": 1,
+          "passed": false,
+          "score": 0,
+          "digest": "0b0b65e9d100f812208e575cbf421e9f26be7c7e7097dbc4f60e9a8b667a7efb"
+        }
+      ],
+      "error": "A saved test failed. Review the evidence and adjust the candidate.",
+      "tokens": 7856,
+      "createdAt": "2026-09-27T15:51:36.291Z"
+    },
+    "runs": [
+      {
+        "id": "aa29d7cc-83ee-4ac7-ac97-5eff63a3676e",
+        "status": "exhausted",
+        "usage": {
+          "inputTokens": 6685,
+          "outputTokens": 1171,
+          "costUsd": 0.0284225,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 2,
+        "evaluation": {
+          "score": 0,
+          "verdict": "revise",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 0.5,
+              "rationale": "The outputs correctly calculated subtotal, tax, and total values based on supplied input values. However, the status field should be 'held' if the billing address is missing, according to provided business rules, which incorrectly set it to 'draft'.",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output is a complete JSON object containing the required fields: subtotal, tax, total, and status. The format itself is correct, despite the wrong status logic.",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 0,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 0,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 0,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "Saved regression checks failed. While the outputs were computationally correct, the use of the status field 'draft' instead of 'held' contradicts the business rule when the billing address is missing. Therefore the overall evaluation asks for revision.",
+          "issues": [
+            "The 'status' field should be 'held' if billing_address is missing, according to provided business rules. However, the correct computation was done with given values.",
+            "Saved json_number assertion: subtotal = 180",
+            "Saved json_number assertion: tax = 18",
+            "Saved json_number assertion: total = 198"
+          ],
+          "memoryVerdicts": []
+        }
+      }
+    ]
+  },
+  "intermediate_incomplete_coverage_rolled_back": {
+    "chatId": "4cf01216-21e9-4885-bb61-e403239224f0",
+    "suite": {
+      "id": "70d9b569-fde2-461f-8c08-2a944ac76fdc",
+      "status": "passed",
+      "baseDigest": "1425d1e4a758ae2b47a582a5cffcafa772ab496999de6aa08866bb9a10356054",
+      "baseRules": [],
+      "rules": [
+        "If billing_address is missing, set status to held. Never invent a billing address."
+      ],
+      "candidate": {
+        "title": "Invoice calculation \u2014 saved regression demo",
+        "explanation": "Calculate a document-only invoice summary and flag missing billing addresses. Return one JSON object, with subtotal, tax, total and status. Never connect to external apps.",
+        "nodes": [
+          {
+            "id": "calculator",
+            "name": "Invoice calculator",
+            "role": "Calculate discounted totals and flag exceptions",
+            "instruction": "Read the input order. Compute subtotal = quantity * unit_price - line_discount; tax = subtotal * tax_rate; total = subtotal + tax. Round monetary values to two decimals. Determine the status: set to 'held' if billing_address is missing per approved business rule; otherwise use 'active'. Return a JSON object with numeric subtotal, tax, total, and status.",
+            "toolkits": [],
+            "dependsOn": []
+          }
+        ],
+        "criteria": [
+          {
+            "id": "grounded",
+            "name": "Source grounding",
+            "description": "Use only supplied order values and business rules; do not invent data or external actions.",
+            "weight": 1,
+            "required": true
+          },
+          {
+            "id": "json",
+            "name": "Complete JSON",
+            "description": "Return a JSON object containing subtotal, tax, total and status.",
+            "weight": 1,
+            "required": true
+          }
+        ]
+      },
+      "cases": [
+        {
+          "id": "discount",
+          "name": "Tax after a line discount",
+          "input": "quantity: 2; unit_price: 100; line_discount: 20; tax_rate: 0.10; billing_address: 10 Example Street.",
+          "checks": [
+            {
+              "kind": "json_number",
+              "value": "180",
+              "path": "subtotal"
+            },
+            {
+              "kind": "json_number",
+              "value": "18",
+              "path": "tax"
+            },
+            {
+              "kind": "json_number",
+              "value": "198",
+              "path": "total"
+            }
+          ]
+        },
+        {
+          "id": "hold",
+          "name": "Missing billing address",
+          "input": "quantity: 1; unit_price: 50; line_discount: 5; tax_rate: 0.20; billing_address: missing.",
+          "checks": [
+            {
+              "kind": "json_number",
+              "value": "54",
+              "path": "total"
+            },
+            {
+              "kind": "contains",
+              "value": "held"
+            }
+          ]
+        }
+      ],
+      "index": 2,
+      "round": 2,
+      "maxRounds": 3,
+      "results": [
+        {
+          "caseId": "discount",
+          "runId": "94a88ee2-0ca6-49f1-b64e-c0bc587eb6ed",
+          "round": 1,
+          "passed": true,
+          "score": 1,
+          "digest": "2c6140c38f084d883ce067035b22b6267e71fdf31ca2931f43b74b3d745b8354"
+        },
+        {
+          "caseId": "discount",
+          "runId": "51a20b51-8dc0-466b-9c74-bf386ce35d25",
+          "round": 2,
+          "passed": true,
+          "score": 1,
+          "digest": "2c6140c38f084d883ce067035b22b6267e71fdf31ca2931f43b74b3d745b8354"
+        },
+        {
+          "caseId": "hold",
+          "runId": "38547d2f-2418-4fa5-8b40-3cf2b4fe9384",
+          "round": 2,
+          "passed": true,
+          "score": 1,
+          "digest": "2c6140c38f084d883ce067035b22b6267e71fdf31ca2931f43b74b3d745b8354"
+        }
+      ],
+      "error": null,
+      "tokens": 14266,
+      "createdAt": "2026-09-27T15:52:56.305Z"
+    },
+    "runs": [
+      {
+        "id": "38547d2f-2418-4fa5-8b40-3cf2b4fe9384",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 2322,
+          "outputTokens": 466,
+          "costUsd": 0.010465,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 1,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The outputs strictly use the provided order values (quantity: 1, unit_price: 50, line_discount: 5, tax_rate: 0.20) and adhere to the business rule about missing billing address, as noted by setting the status to 'held.' No external data or actions were invented.",
+              "evidenceIds": [
+                "625ece7a-dc3f-423f-8965-382a902581be"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output is a JSON object containing all required fields: subtotal, tax, total, and status.",
+              "evidenceIds": [
+                "625ece7a-dc3f-423f-8965-382a902581be"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 54",
+              "evidenceIds": [
+                "625ece7a-dc3f-423f-8965-382a902581be"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved contains assertion: held",
+              "evidenceIds": [
+                "625ece7a-dc3f-423f-8965-382a902581be"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The task meets all the specified criteria accurately.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "51a20b51-8dc0-466b-9c74-bf386ce35d25",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 2508,
+          "outputTokens": 377,
+          "costUsd": 0.01004,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 1,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The output uses supplied order values without inventing any data, consistent with input values and business rules.",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output JSON includes the required fields: subtotal, tax, total, and status. The values are consistent with calculations based on the input.",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The output JSON is correctly formatted and grounded in supplied data.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "94a88ee2-0ca6-49f1-b64e-c0bc587eb6ed",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 7179,
+          "outputTokens": 1414,
+          "costUsd": 0.0320875,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 2,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "All output values are directly computed from given input. The calculation uses only the provided quantity, unit price, line discount, and tax rate to compute subtotal, tax, and total, as per the business rules. The status 'active' is correctly applied since the billing address is present.",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output is a complete and correctly structured JSON object containing 'subtotal', 'tax', 'total', and 'status' as required.",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The output met both criteria: all values are grounded in the input and the JSON is complete and correctly formatted.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "aa29d7cc-83ee-4ac7-ac97-5eff63a3676e",
+        "status": "exhausted",
+        "usage": {
+          "inputTokens": 6685,
+          "outputTokens": 1171,
+          "costUsd": 0.0284225,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 2,
+        "evaluation": {
+          "score": 0,
+          "verdict": "revise",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 0.5,
+              "rationale": "The outputs correctly calculated subtotal, tax, and total values based on supplied input values. However, the status field should be 'held' if the billing address is missing, according to provided business rules, which incorrectly set it to 'draft'.",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output is a complete JSON object containing the required fields: subtotal, tax, total, and status. The format itself is correct, despite the wrong status logic.",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 0,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 0,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 0,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "Saved regression checks failed. While the outputs were computationally correct, the use of the status field 'draft' instead of 'held' contradicts the business rule when the billing address is missing. Therefore the overall evaluation asks for revision.",
+          "issues": [
+            "The 'status' field should be 'held' if billing_address is missing, according to provided business rules. However, the correct computation was done with given values.",
+            "Saved json_number assertion: subtotal = 180",
+            "Saved json_number assertion: tax = 18",
+            "Saved json_number assertion: total = 198"
+          ],
+          "memoryVerdicts": []
+        }
+      }
+    ],
+    "applied": true
+  },
+  "strengthened_final": {
+    "chatId": "4cf01216-21e9-4885-bb61-e403239224f0",
+    "suite": {
+      "id": "719c3b26-a72c-4203-bf1d-71e1a1820a85",
+      "status": "passed",
+      "baseDigest": "1425d1e4a758ae2b47a582a5cffcafa772ab496999de6aa08866bb9a10356054",
+      "baseRules": [],
+      "rules": [
+        "If billing_address is missing, set status to held. If an address is supplied, set status to draft. Never invent an address."
+      ],
+      "candidate": {
+        "title": "Invoice Calculation \u2014 Updated Regression Demo",
+        "explanation": "Calculate an invoice summary, including discounted totals and taxes, and flag if any billing address information is missing. Output a single JSON object with subtotal, tax, total, and status fields. Refrain from accessing external applications.",
+        "nodes": [
+          {
+            "id": "calculator",
+            "name": "Invoice Calculator",
+            "role": "Calculating Invoice Totals and Status",
+            "instruction": "Read the input order parameters: quantity, unit_price, line_discount, and tax_rate. Compute the subtotal by subtracting line_discount from (quantity * unit_price). Calculate the tax as subtotal * tax_rate. Compute the total as subtotal + tax. Round monetary values to two decimal places. Ensure the status is 'draft' if an address is present, otherwise 'held'. Return a JSON object with numeric fields for subtotal, tax, total, and a string for status.",
+            "toolkits": [],
+            "dependsOn": []
+          },
+          {
+            "id": "compliance_checker",
+            "name": "Compliance Checker",
+            "role": "Validate Completed Calculations",
+            "instruction": "Ensure the calculated subtotal, tax, and total match predefined expectations for regression tests. Verify the status is set according to the presence of a billing address.",
+            "toolkits": [],
+            "dependsOn": [
+              "calculator"
+            ]
+          },
+          {
+            "id": "final_output",
+            "name": "Final Output",
+            "role": "Delivery Agent",
+            "instruction": "Collect validated calculations and statuses, ensuring all fields are accurate as per compliance checks, and output the final JSON object.",
+            "toolkits": [],
+            "dependsOn": [
+              "compliance_checker"
+            ]
+          }
+        ],
+        "criteria": [
+          {
+            "id": "grounded",
+            "name": "Source grounding",
+            "description": "Use only supplied order values and business rules; do not invent data or external actions.",
+            "weight": 1,
+            "required": true
+          },
+          {
+            "id": "json",
+            "name": "Complete JSON",
+            "description": "Return a JSON object containing subtotal, tax, total and status.",
+            "weight": 1,
+            "required": true
+          }
+        ]
+      },
+      "cases": [
+        {
+          "id": "discount",
+          "name": "Tax after a line discount",
+          "input": "quantity: 2; unit_price: 100; line_discount: 20; tax_rate: 0.10; billing_address: 10 Example Street.",
+          "checks": [
+            {
+              "kind": "json_number",
+              "value": "180",
+              "path": "subtotal"
+            },
+            {
+              "kind": "json_number",
+              "value": "18",
+              "path": "tax"
+            },
+            {
+              "kind": "json_number",
+              "value": "198",
+              "path": "total"
+            },
+            {
+              "kind": "json_string",
+              "value": "draft",
+              "path": "status"
+            }
+          ]
+        },
+        {
+          "id": "hold",
+          "name": "Missing billing address",
+          "input": "quantity: 1; unit_price: 50; line_discount: 5; tax_rate: 0.20; billing_address: missing.",
+          "checks": [
+            {
+              "kind": "json_number",
+              "value": "54",
+              "path": "total"
+            },
+            {
+              "kind": "json_string",
+              "value": "held",
+              "path": "status"
+            }
+          ]
+        }
+      ],
+      "index": 2,
+      "round": 2,
+      "maxRounds": 3,
+      "results": [
+        {
+          "caseId": "discount",
+          "runId": "002a2d0f-d2f5-45a5-8d64-7000d7f99a77",
+          "round": 1,
+          "passed": true,
+          "score": 1,
+          "digest": "14471b8f9552e46454975bcac5554ec1d7594b7a06662255ef155aeaa9bf6102"
+        },
+        {
+          "caseId": "discount",
+          "runId": "f2402ccf-69ef-4624-bff6-ab229447d75b",
+          "round": 2,
+          "passed": true,
+          "score": 1,
+          "digest": "14471b8f9552e46454975bcac5554ec1d7594b7a06662255ef155aeaa9bf6102"
+        },
+        {
+          "caseId": "hold",
+          "runId": "7a9fac9a-79ec-4411-8367-02ef15ea0681",
+          "round": 2,
+          "passed": true,
+          "score": 1,
+          "digest": "14471b8f9552e46454975bcac5554ec1d7594b7a06662255ef155aeaa9bf6102"
+        }
+      ],
+      "error": null,
+      "tokens": 26785,
+      "createdAt": "2026-09-27T15:56:26.311Z"
+    },
+    "runs": [
+      {
+        "id": "7a9fac9a-79ec-4411-8367-02ef15ea0681",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 5314,
+          "outputTokens": 912,
+          "costUsd": 0.022405,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 1,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The logic used aligns with the provided order values. Subtotal, tax, total, and status are calculated based on inputs (quantity, unit price, line discount, tax rate). Status is correctly set to 'held' due to missing billing address as per business rules.",
+              "evidenceIds": [
+                "7ec6a9d3-50b0-4726-81b5-b74697a26ed2",
+                "48c03fe7-c2f3-47c9-896a-19898b108824",
+                "1703e398-89c2-4653-83c9-cde761fc48f9"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output JSON is complete with all required fields: subtotal, tax, total, and status. Values corroborate the target expectations.",
+              "evidenceIds": [
+                "1703e398-89c2-4653-83c9-cde761fc48f9"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 54",
+              "evidenceIds": [
+                "1703e398-89c2-4653-83c9-cde761fc48f9"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_string assertion: status = held",
+              "evidenceIds": [
+                "1703e398-89c2-4653-83c9-cde761fc48f9"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "All criteria are met with a JSON object that is properly grounded and complete.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "f2402ccf-69ef-4624-bff6-ab229447d75b",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 5826,
+          "outputTokens": 947,
+          "costUsd": 0.024034999999999997,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 1,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The output JSON object uses only the supplied order values and follows the business rules. No data was invented and the calculations are based on the inputs provided: quantity, unit_price, line_discount, tax_rate, and billing_address.",
+              "evidenceIds": [
+                "77be728b-c57f-440b-b789-952aae068a8e",
+                "ca6ca4ac-d5cd-4102-bee1-6f75a239f175",
+                "c17e1a57-e88f-4b54-83b9-40e905f8fb6a"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The final output is a complete JSON object containing the required fields: subtotal, tax, total, and status. The calculations match the deterministic check expectations.",
+              "evidenceIds": [
+                "c17e1a57-e88f-4b54-83b9-40e905f8fb6a"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "c17e1a57-e88f-4b54-83b9-40e905f8fb6a"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "c17e1a57-e88f-4b54-83b9-40e905f8fb6a"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "c17e1a57-e88f-4b54-83b9-40e905f8fb6a"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_3",
+              "score": 1,
+              "rationale": "Saved json_string assertion: status = draft",
+              "evidenceIds": [
+                "c17e1a57-e88f-4b54-83b9-40e905f8fb6a"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The output is successfully grounded in the provided inputs and business rules, with a correctly formatted JSON object containing all required fields.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "002a2d0f-d2f5-45a5-8d64-7000d7f99a77",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 11769,
+          "outputTokens": 2017,
+          "costUsd": 0.0495925,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 2,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The provided data matches the inputs: quantity (2), unit price (100), line discount (20), tax rate (0.10), and billing address (10 Example Street). The business rule regarding the status being 'draft' when a billing address is present is correctly applied. No data or external actions are invented.",
+              "evidenceIds": [
+                "3249639b-6f81-4c13-bfe0-269e22b02392",
+                "3b9277e2-efc1-402b-8a05-3ad2bc8f4bb8",
+                "b63ec948-f492-47be-bccb-f2b86390419d"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The final output contains all required fields: subtotal (180.00), tax (18.00), total (198.00), and status ('draft'). The JSON format is correctly used.",
+              "evidenceIds": [
+                "b63ec948-f492-47be-bccb-f2b86390419d"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "b63ec948-f492-47be-bccb-f2b86390419d"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "b63ec948-f492-47be-bccb-f2b86390419d"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "b63ec948-f492-47be-bccb-f2b86390419d"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_3",
+              "score": 1,
+              "rationale": "Saved json_string assertion: status = draft",
+              "evidenceIds": [
+                "b63ec948-f492-47be-bccb-f2b86390419d"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The outputs utilize only the provided data and business rules correctly, and the final JSON object is complete and accurate with all expected fields.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "38547d2f-2418-4fa5-8b40-3cf2b4fe9384",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 2322,
+          "outputTokens": 466,
+          "costUsd": 0.010465,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 1,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The outputs strictly use the provided order values (quantity: 1, unit_price: 50, line_discount: 5, tax_rate: 0.20) and adhere to the business rule about missing billing address, as noted by setting the status to 'held.' No external data or actions were invented.",
+              "evidenceIds": [
+                "625ece7a-dc3f-423f-8965-382a902581be"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output is a JSON object containing all required fields: subtotal, tax, total, and status.",
+              "evidenceIds": [
+                "625ece7a-dc3f-423f-8965-382a902581be"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 54",
+              "evidenceIds": [
+                "625ece7a-dc3f-423f-8965-382a902581be"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved contains assertion: held",
+              "evidenceIds": [
+                "625ece7a-dc3f-423f-8965-382a902581be"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The task meets all the specified criteria accurately.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "51a20b51-8dc0-466b-9c74-bf386ce35d25",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 2508,
+          "outputTokens": 377,
+          "costUsd": 0.01004,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 1,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The output uses supplied order values without inventing any data, consistent with input values and business rules.",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output JSON includes the required fields: subtotal, tax, total, and status. The values are consistent with calculations based on the input.",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The output JSON is correctly formatted and grounded in supplied data.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "94a88ee2-0ca6-49f1-b64e-c0bc587eb6ed",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 7179,
+          "outputTokens": 1414,
+          "costUsd": 0.0320875,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 2,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "All output values are directly computed from given input. The calculation uses only the provided quantity, unit price, line discount, and tax rate to compute subtotal, tax, and total, as per the business rules. The status 'active' is correctly applied since the billing address is present.",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output is a complete and correctly structured JSON object containing 'subtotal', 'tax', 'total', and 'status' as required.",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The output met both criteria: all values are grounded in the input and the JSON is complete and correctly formatted.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "aa29d7cc-83ee-4ac7-ac97-5eff63a3676e",
+        "status": "exhausted",
+        "usage": {
+          "inputTokens": 6685,
+          "outputTokens": 1171,
+          "costUsd": 0.0284225,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 2,
+        "evaluation": {
+          "score": 0,
+          "verdict": "revise",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 0.5,
+              "rationale": "The outputs correctly calculated subtotal, tax, and total values based on supplied input values. However, the status field should be 'held' if the billing address is missing, according to provided business rules, which incorrectly set it to 'draft'.",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output is a complete JSON object containing the required fields: subtotal, tax, total, and status. The format itself is correct, despite the wrong status logic.",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 0,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 0,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 0,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "Saved regression checks failed. While the outputs were computationally correct, the use of the status field 'draft' instead of 'held' contradicts the business rule when the billing address is missing. Therefore the overall evaluation asks for revision.",
+          "issues": [
+            "The 'status' field should be 'held' if billing_address is missing, according to provided business rules. However, the correct computation was done with given values.",
+            "Saved json_number assertion: subtotal = 180",
+            "Saved json_number assertion: tax = 18",
+            "Saved json_number assertion: total = 198"
+          ],
+          "memoryVerdicts": []
+        }
+      }
+    ],
+    "applied": true
+  },
+  "sharing_checks": {
+    "publish_requires_review": true,
+    "public_metadata_excludes_private_data": true,
+    "unauthenticated_revoke_rejected": true,
+    "atomic_quota_12_requests_10_sessions": true,
+    "unauthenticated_private_read_rejected": true,
+    "fixed_template_edit_rejected": true,
+    "revocation_blocks_new_sessions_and_execution": true
+  },
+  "local_demo_link": "http://127.0.0.1:3000/w/e1b68aa6-c651-4a6e-9fd3-a7aedeac8857",
+  "automated_checks": {
+    "tests": 103,
+    "typecheck": "passed",
+    "lint": "passed",
+    "build": "passed"
+  },
+  "latest_with_reserved_case": {
+    "chatId": "4cf01216-21e9-4885-bb61-e403239224f0",
+    "suite": {
+      "id": "16d52979-d8bf-43f0-8cbf-3dd2de2cca2c",
+      "status": "passed",
+      "baseDigest": "1425d1e4a758ae2b47a582a5cffcafa772ab496999de6aa08866bb9a10356054",
+      "baseRules": [],
+      "rules": [
+        "Apply line_discount once to the entire order, not once per unit. If billing_address is missing set status to held; otherwise set status to draft. Never invent an address."
+      ],
+      "candidate": {
+        "title": "Invoice calculation \u2014 saved regression demo",
+        "explanation": "Calculate a document-only invoice summary and flag missing billing addresses. Return one JSON object, with subtotal, tax, total and status. Never connect to external apps.",
+        "nodes": [
+          {
+            "id": "calculator",
+            "name": "Invoice calculator",
+            "role": "Calculate discounted totals and flag exceptions",
+            "instruction": "Read the input order. Compute subtotal = quantity * unit_price - line_discount; tax = subtotal * tax_rate; total = subtotal + tax. Round monetary values to two decimals. Return only a JSON object with numeric subtotal, tax, total and a status field. Use draft status unless an approved business rule requires a hold.",
+            "toolkits": [],
+            "dependsOn": []
+          }
+        ],
+        "criteria": [
+          {
+            "id": "grounded",
+            "name": "Source grounding",
+            "description": "Use only supplied order values and business rules; do not invent data or external actions.",
+            "weight": 1,
+            "required": true
+          },
+          {
+            "id": "json",
+            "name": "Complete JSON",
+            "description": "Return a JSON object containing subtotal, tax, total and status.",
+            "weight": 1,
+            "required": true
+          }
+        ]
+      },
+      "cases": [
+        {
+          "id": "discount",
+          "name": "Tax after a line discount",
+          "input": "quantity: 2; unit_price: 100; line_discount: 20; tax_rate: 0.10; billing_address: 10 Example Street.",
+          "checks": [
+            {
+              "kind": "json_number",
+              "value": "180",
+              "path": "subtotal"
+            },
+            {
+              "kind": "json_number",
+              "value": "18",
+              "path": "tax"
+            },
+            {
+              "kind": "json_number",
+              "value": "198",
+              "path": "total"
+            },
+            {
+              "kind": "json_string",
+              "value": "draft",
+              "path": "status"
+            }
+          ]
+        },
+        {
+          "id": "hold",
+          "name": "Missing billing address",
+          "input": "quantity: 1; unit_price: 50; line_discount: 5; tax_rate: 0.20; billing_address: missing.",
+          "checks": [
+            {
+              "kind": "json_number",
+              "value": "54",
+              "path": "total"
+            },
+            {
+              "kind": "json_string",
+              "value": "held",
+              "path": "status"
+            }
+          ]
+        },
+        {
+          "id": "unseen_quantity",
+          "name": "Held-out: discount applies once for three units",
+          "input": "quantity: 3; unit_price: 80; line_discount: 15; tax_rate: 0.08; billing_address: 25 Example Avenue.",
+          "checks": [
+            {
+              "kind": "json_number",
+              "value": "225",
+              "path": "subtotal"
+            },
+            {
+              "kind": "json_number",
+              "value": "18",
+              "path": "tax"
+            },
+            {
+              "kind": "json_number",
+              "value": "243",
+              "path": "total"
+            },
+            {
+              "kind": "json_string",
+              "value": "draft",
+              "path": "status"
+            }
+          ],
+          "heldOut": true
+        }
+      ],
+      "index": 3,
+      "round": 1,
+      "maxRounds": 3,
+      "results": [
+        {
+          "caseId": "discount",
+          "runId": "ffb647de-26f3-481d-9823-b3c972b482e9",
+          "round": 1,
+          "passed": true,
+          "score": 1,
+          "digest": "1425d1e4a758ae2b47a582a5cffcafa772ab496999de6aa08866bb9a10356054"
+        },
+        {
+          "caseId": "hold",
+          "runId": "ddfa2775-2fd0-4876-a8d7-5839d8840356",
+          "round": 1,
+          "passed": true,
+          "score": 1,
+          "digest": "1425d1e4a758ae2b47a582a5cffcafa772ab496999de6aa08866bb9a10356054"
+        },
+        {
+          "caseId": "unseen_quantity",
+          "runId": "cff0a79d-0d35-44b1-92d8-087d632939a9",
+          "round": 1,
+          "passed": true,
+          "score": 1,
+          "digest": "1425d1e4a758ae2b47a582a5cffcafa772ab496999de6aa08866bb9a10356054"
+        }
+      ],
+      "error": null,
+      "tokens": 9874,
+      "createdAt": "2026-09-28T04:18:19.711Z"
+    },
+    "runs": [
+      {
+        "id": "cff0a79d-0d35-44b1-92d8-087d632939a9",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 3021,
+          "outputTokens": 478,
+          "costUsd": 0.0123325,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 1,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The output uses all supplied values (quantity, unit price, line discount, tax rate, billing address) and adheres to the business rules without inventing data or actions.",
+              "evidenceIds": [
+                "90d7f6a5-b9f5-4470-a183-71888fba7ed3"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output is a complete JSON object containing the required fields: subtotal, tax, total, and status, all in the correct format.",
+              "evidenceIds": [
+                "90d7f6a5-b9f5-4470-a183-71888fba7ed3"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: subtotal = 225",
+              "evidenceIds": [
+                "90d7f6a5-b9f5-4470-a183-71888fba7ed3"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "90d7f6a5-b9f5-4470-a183-71888fba7ed3"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 243",
+              "evidenceIds": [
+                "90d7f6a5-b9f5-4470-a183-71888fba7ed3"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_3",
+              "score": 1,
+              "rationale": "Saved json_string assertion: status = draft",
+              "evidenceIds": [
+                "90d7f6a5-b9f5-4470-a183-71888fba7ed3"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The output meets all requirements: values are correctly calculated, and the JSON format includes the necessary fields with the specified status.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "ddfa2775-2fd0-4876-a8d7-5839d8840356",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 2581,
+          "outputTokens": 438,
+          "costUsd": 0.010832500000000002,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 1,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The outputs strictly use the provided order values and comply with the specified business rules. The billing status is set to 'held' as the billing address is missing, and there is no invented data or actions.",
+              "evidenceIds": [
+                "d6a6c747-1a75-45a2-87fa-1e08262af4ff"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output is a complete JSON object containing all required fields: subtotal, tax, total, and status.",
+              "evidenceIds": [
+                "d6a6c747-1a75-45a2-87fa-1e08262af4ff"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 54",
+              "evidenceIds": [
+                "d6a6c747-1a75-45a2-87fa-1e08262af4ff"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_string assertion: status = held",
+              "evidenceIds": [
+                "d6a6c747-1a75-45a2-87fa-1e08262af4ff"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The outputs meet all the expected criteria and the business rules were applied correctly.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "ffb647de-26f3-481d-9823-b3c972b482e9",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 2981,
+          "outputTokens": 375,
+          "costUsd": 0.0112025,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 1,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The response uses only the supplied values and business rules from the input without inventing any data.",
+              "evidenceIds": [
+                "d3bb8c44-ff37-4397-8127-bd3b7e1a904f"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The response returns a complete JSON object including subtotal, tax, total, and status, correctly calculated as per deterministic checks.",
+              "evidenceIds": [
+                "d3bb8c44-ff37-4397-8127-bd3b7e1a904f"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "d3bb8c44-ff37-4397-8127-bd3b7e1a904f"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "d3bb8c44-ff37-4397-8127-bd3b7e1a904f"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "d3bb8c44-ff37-4397-8127-bd3b7e1a904f"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_3",
+              "score": 1,
+              "rationale": "Saved json_string assertion: status = draft",
+              "evidenceIds": [
+                "d3bb8c44-ff37-4397-8127-bd3b7e1a904f"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The response meets all rubric and business rule requirements, supplying required JSON fields based on given inputs.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "7a9fac9a-79ec-4411-8367-02ef15ea0681",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 5314,
+          "outputTokens": 912,
+          "costUsd": 0.022405,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 1,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The logic used aligns with the provided order values. Subtotal, tax, total, and status are calculated based on inputs (quantity, unit price, line discount, tax rate). Status is correctly set to 'held' due to missing billing address as per business rules.",
+              "evidenceIds": [
+                "7ec6a9d3-50b0-4726-81b5-b74697a26ed2",
+                "48c03fe7-c2f3-47c9-896a-19898b108824",
+                "1703e398-89c2-4653-83c9-cde761fc48f9"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output JSON is complete with all required fields: subtotal, tax, total, and status. Values corroborate the target expectations.",
+              "evidenceIds": [
+                "1703e398-89c2-4653-83c9-cde761fc48f9"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 54",
+              "evidenceIds": [
+                "1703e398-89c2-4653-83c9-cde761fc48f9"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_string assertion: status = held",
+              "evidenceIds": [
+                "1703e398-89c2-4653-83c9-cde761fc48f9"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "All criteria are met with a JSON object that is properly grounded and complete.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "f2402ccf-69ef-4624-bff6-ab229447d75b",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 5826,
+          "outputTokens": 947,
+          "costUsd": 0.024034999999999997,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 1,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The output JSON object uses only the supplied order values and follows the business rules. No data was invented and the calculations are based on the inputs provided: quantity, unit_price, line_discount, tax_rate, and billing_address.",
+              "evidenceIds": [
+                "77be728b-c57f-440b-b789-952aae068a8e",
+                "ca6ca4ac-d5cd-4102-bee1-6f75a239f175",
+                "c17e1a57-e88f-4b54-83b9-40e905f8fb6a"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The final output is a complete JSON object containing the required fields: subtotal, tax, total, and status. The calculations match the deterministic check expectations.",
+              "evidenceIds": [
+                "c17e1a57-e88f-4b54-83b9-40e905f8fb6a"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "c17e1a57-e88f-4b54-83b9-40e905f8fb6a"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "c17e1a57-e88f-4b54-83b9-40e905f8fb6a"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "c17e1a57-e88f-4b54-83b9-40e905f8fb6a"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_3",
+              "score": 1,
+              "rationale": "Saved json_string assertion: status = draft",
+              "evidenceIds": [
+                "c17e1a57-e88f-4b54-83b9-40e905f8fb6a"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The output is successfully grounded in the provided inputs and business rules, with a correctly formatted JSON object containing all required fields.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "002a2d0f-d2f5-45a5-8d64-7000d7f99a77",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 11769,
+          "outputTokens": 2017,
+          "costUsd": 0.0495925,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 2,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The provided data matches the inputs: quantity (2), unit price (100), line discount (20), tax rate (0.10), and billing address (10 Example Street). The business rule regarding the status being 'draft' when a billing address is present is correctly applied. No data or external actions are invented.",
+              "evidenceIds": [
+                "3249639b-6f81-4c13-bfe0-269e22b02392",
+                "3b9277e2-efc1-402b-8a05-3ad2bc8f4bb8",
+                "b63ec948-f492-47be-bccb-f2b86390419d"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The final output contains all required fields: subtotal (180.00), tax (18.00), total (198.00), and status ('draft'). The JSON format is correctly used.",
+              "evidenceIds": [
+                "b63ec948-f492-47be-bccb-f2b86390419d"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "b63ec948-f492-47be-bccb-f2b86390419d"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "b63ec948-f492-47be-bccb-f2b86390419d"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "b63ec948-f492-47be-bccb-f2b86390419d"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_3",
+              "score": 1,
+              "rationale": "Saved json_string assertion: status = draft",
+              "evidenceIds": [
+                "b63ec948-f492-47be-bccb-f2b86390419d"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The outputs utilize only the provided data and business rules correctly, and the final JSON object is complete and accurate with all expected fields.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "38547d2f-2418-4fa5-8b40-3cf2b4fe9384",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 2322,
+          "outputTokens": 466,
+          "costUsd": 0.010465,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 1,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The outputs strictly use the provided order values (quantity: 1, unit_price: 50, line_discount: 5, tax_rate: 0.20) and adhere to the business rule about missing billing address, as noted by setting the status to 'held.' No external data or actions were invented.",
+              "evidenceIds": [
+                "625ece7a-dc3f-423f-8965-382a902581be"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output is a JSON object containing all required fields: subtotal, tax, total, and status.",
+              "evidenceIds": [
+                "625ece7a-dc3f-423f-8965-382a902581be"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 54",
+              "evidenceIds": [
+                "625ece7a-dc3f-423f-8965-382a902581be"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved contains assertion: held",
+              "evidenceIds": [
+                "625ece7a-dc3f-423f-8965-382a902581be"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The task meets all the specified criteria accurately.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "51a20b51-8dc0-466b-9c74-bf386ce35d25",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 2508,
+          "outputTokens": 377,
+          "costUsd": 0.01004,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 1,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "The output uses supplied order values without inventing any data, consistent with input values and business rules.",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output JSON includes the required fields: subtotal, tax, total, and status. The values are consistent with calculations based on the input.",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "9f2b6220-dc3c-4a6e-b0e4-93a9943d99b1"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The output JSON is correctly formatted and grounded in supplied data.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "94a88ee2-0ca6-49f1-b64e-c0bc587eb6ed",
+        "status": "completed",
+        "usage": {
+          "inputTokens": 7179,
+          "outputTokens": 1414,
+          "costUsd": 0.0320875,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 2,
+        "evaluation": {
+          "score": 1,
+          "verdict": "pass",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 1,
+              "rationale": "All output values are directly computed from given input. The calculation uses only the provided quantity, unit price, line discount, and tax rate to compute subtotal, tax, and total, as per the business rules. The status 'active' is correctly applied since the billing address is present.",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output is a complete and correctly structured JSON object containing 'subtotal', 'tax', 'total', and 'status' as required.",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 1,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 1,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 1,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "3b6987f2-7c90-4df6-adc7-789280449531"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "The output met both criteria: all values are grounded in the input and the JSON is complete and correctly formatted.",
+          "issues": [],
+          "memoryVerdicts": []
+        }
+      },
+      {
+        "id": "aa29d7cc-83ee-4ac7-ac97-5eff63a3676e",
+        "status": "exhausted",
+        "usage": {
+          "inputTokens": 6685,
+          "outputTokens": 1171,
+          "costUsd": 0.0284225,
+          "model": "openai/gpt-4o"
+        },
+        "attempts": 2,
+        "evaluation": {
+          "score": 0,
+          "verdict": "revise",
+          "checks": [
+            {
+              "criterionId": "grounded",
+              "score": 0.5,
+              "rationale": "The outputs correctly calculated subtotal, tax, and total values based on supplied input values. However, the status field should be 'held' if the billing address is missing, according to provided business rules, which incorrectly set it to 'draft'.",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "json",
+              "score": 1,
+              "rationale": "The output is a complete JSON object containing the required fields: subtotal, tax, total, and status. The format itself is correct, despite the wrong status logic.",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_0",
+              "score": 0,
+              "rationale": "Saved json_number assertion: subtotal = 180",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_1",
+              "score": 0,
+              "rationale": "Saved json_number assertion: tax = 18",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            },
+            {
+              "criterionId": "regression_2",
+              "score": 0,
+              "rationale": "Saved json_number assertion: total = 198",
+              "evidenceIds": [
+                "f2b96809-319d-4a16-b2a9-aa1b66dc2711"
+              ],
+              "verified": true
+            }
+          ],
+          "summary": "Saved regression checks failed. While the outputs were computationally correct, the use of the status field 'draft' instead of 'held' contradicts the business rule when the billing address is missing. Therefore the overall evaluation asks for revision.",
+          "issues": [
+            "The 'status' field should be 'held' if billing_address is missing, according to provided business rules. However, the correct computation was done with given values.",
+            "Saved json_number assertion: subtotal = 180",
+            "Saved json_number assertion: tax = 18",
+            "Saved json_number assertion: total = 198"
+          ],
+          "memoryVerdicts": []
+        }
+      }
+    ],
+    "applied": true,
+    "publication": {
+      "id": "e1b68aa6-c651-4a6e-9fd3-a7aedeac8857",
+      "path": "/w/e1b68aa6-c651-4a6e-9fd3-a7aedeac8857",
+      "maxUses": 10
+    }
+  },
+  "visitor_failure": {
+    "runId": "ae1a47e8-3b7f-482c-9346-20ccb07b16c3",
+    "input": "quantity: 3; unit_price: 80; line_discount: 15; tax_rate: 0.08; billing_address: 25 Example Avenue.",
+    "expected": {
+      "subtotal": 225,
+      "tax": 18,
+      "total": 243,
+      "status": "draft"
+    },
+    "actualOutput": "Here is a revised version of the validated calculations and statuses in JSON format, ensuring compliance with all given checks:\n\n```json\n{\n  \"quantity\": 3,\n  \"unit_price\": 80,\n  \"line_discount\": 15,\n  \"expected_subtotal\": 195.00,\n  \"expected_tax\": 15.60,\n  \"expected_total\": 210.60,\n  \"tax_rate\": 0.08,\n  \"billing_address\": \"25 Example Avenue\",\n  \"status\": \"draft\"\n}\n```\n\nThis JSON object includes the accurate calculations for subtotal, tax, and total amounts, adhering to the specified business rules, and ensures the status is set correctly according to the availability of the billing address.",
+    "result": "failed; publication revoked and release rolled back"
+  },
+  "final_visitor_smoke_check": {
+    "runId": "3772b2df-03e3-4165-a89a-6726ac869336",
+    "input": "quantity: 2; unit_price: 125; line_discount: 25; tax_rate: 0.10; billing_address: 40 Example Road.",
+    "expected": {
+      "subtotal": 225,
+      "tax": 22.5,
+      "total": 247.5,
+      "status": "draft"
+    },
+    "actual": {
+      "subtotal": 225.0,
+      "tax": 22.5,
+      "total": 247.5,
+      "status": "draft"
+    },
+    "usage": {
+      "inputTokens": 486,
+      "outputTokens": 42,
+      "costUsd": 0.001635,
+      "model": "openai/gpt-4o"
+    },
+    "assertion": "passed"
+  }
+}

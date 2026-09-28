@@ -66,6 +66,7 @@ export default function RunConversation({
               </details>
             );
           })}
+          {evaluation.checks.filter(c=>c.criterionId.startsWith('regression_')).map(c=><details key={c.criterionId}><summary>{c.score===1?<Check size={14}/>:<X size={14}/>}<span>{c.rationale}<small>Required · deterministic</small></span><b>{c.score===1?'Passed':'Failed'}</b></summary><p>Evaluated by code against this run’s frozen saved expectation.</p></details>)}
         </div>
         {evaluation.issues.map((issue, i) => (
           <p className="test-issue" key={i}>

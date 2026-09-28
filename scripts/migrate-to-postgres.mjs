@@ -49,7 +49,12 @@ await pg.exec(readFileSync(join(here, '..', 'server', 'schema.postgres.sql'), 'u
 function sqliteColumns(table) {
   return sqlite.prepare(`PRAGMA table_info('${table}')`).all().map((c) => c.name);
 }
+/** Columns declared integer that legacy SQLite rows may hold as floats.
+ *  SQLite is dynamically typed and stored performance.now() sums verbatim. */
+const INTEGER_COLUMNS = { agent_run_metrics: ['duration_ms'] };
 function derive(table, row) {
+  for (const column of INTEGER_COLUMNS[table] ?? [])
+    if (typeof row[column] === 'number') row[column] = Math.round(row[column]);
   if (table === 'chats' && (row.steps === undefined || row.steps === null)) {
     try {
       const chat = JSON.parse(row.payload);

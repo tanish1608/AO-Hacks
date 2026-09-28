@@ -27,7 +27,7 @@ export function runMetrics(run: Run): RunMetric {
     outputTokens: run.usage.outputTokens,
     // Unknown pricing stays null. Never report an unpriced run as free.
     costUsd: run.usage.costUsd,
-    durationMs: traces.reduce((n, t) => n + t.durationMs, 0),
+    durationMs: Math.round(traces.reduce((n, t) => n + t.durationMs, 0)),
     toolCalls: tools.length,
     // Wasted turns: failed calls plus tool requests the schema rejected.
     toolErrors:

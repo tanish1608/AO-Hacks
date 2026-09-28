@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { register } from 'node:module';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -7,6 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createAssets } from './assets.mjs';
 import { SqliteD1 } from './d1-sqlite.mjs';
+import { PostgresD1 } from './d1-postgres.mjs';
 import { assignEnv, env } from './workers-shim.mjs';
 import { migrate } from './migrate.mjs';
 import { restore, scheduleSnapshot, shutdown, setSnapshotDatabase } from './persistence.mjs';
@@ -18,13 +19,35 @@ const root = join(here, '..');
 const DIST = process.env.DIST_DIR ?? join(root, 'dist');
 const DATA = process.env.DATA_DIR ?? join(root, '.data');
 const PORT = Number(process.env.PORT ?? 8080);
-mkdirSync(DATA, { recursive: true });
-const dbFile = join(DATA, 'foundry.sqlite');
-await restore(dbFile);
-const db = new SqliteD1(dbFile, { onWrite: scheduleSnapshot });
-setSnapshotDatabase(db);
-const applied = migrate(db.db, process.env.MIGRATIONS_DIR ?? join(root, 'drizzle'));
-if (applied.length) console.log(`applied migrations: ${applied.join(', ')}`);
+/**
+ * Cloud SQL when DATABASE_URL is set, otherwise the single-instance SQLite file.
+ *
+ * Only the Postgres path can run more than one instance: the SQLite database
+ * lives in the container's own filesystem, so a second instance would hold a
+ * separate copy and the last snapshot back to Cloud Storage would silently win.
+ */
+const databaseUrl = process.env.DATABASE_URL;
+let db;
+let sqliteFile = null;
+if (databaseUrl) {
+  db = new PostgresD1({
+    connectionString: databaseUrl,
+    max: Number(process.env.PG_POOL_MAX ?? 10),
+    // Cloud SQL closes idle connections; fail fast rather than hang a request.
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 30_000,
+  });
+  await db.exec(readFileSync(join(here, 'schema.postgres.sql'), 'utf8'));
+  console.log('using Cloud SQL');
+} else {
+  mkdirSync(DATA, { recursive: true });
+  sqliteFile = join(DATA, 'foundry.sqlite');
+  await restore(sqliteFile);
+  db = new SqliteD1(sqliteFile, { onWrite: scheduleSnapshot });
+  setSnapshotDatabase(db);
+  const applied = migrate(db.db, process.env.MIGRATIONS_DIR ?? join(root, 'drizzle'));
+  if (applied.length) console.log(`applied migrations: ${applied.join(', ')}`);
+}
 // Only the app's own configuration crosses into the worker; the rest of the
 // process environment stays out of application code.
 const CONFIG = [
@@ -108,6 +131,7 @@ for (const signal of ['SIGTERM', 'SIGINT'])
     if (closing) return;
     closing = true;
     server.close();
-    await shutdown(db, dbFile);
+    if (sqliteFile) await shutdown(db, sqliteFile);
+    else await db.close().catch(() => {});
     process.exit(0);
   });

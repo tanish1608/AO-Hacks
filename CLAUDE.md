@@ -32,6 +32,11 @@ observability optionally forwards to **LangSmith**.
   **Cloudflare Worker** (`wrangler`, Miniflare locally).
 - **D1** (SQLite) via raw `D1Database.prepare` in `lib/server/*`; Drizzle is used only to
   declare the schema (`db/schema.ts`) and generate migrations into `drizzle/`.
+- Production runs that same SQL against **Cloud SQL Postgres** through
+  `server/d1-postgres.mjs`, which implements the D1 surface. **Keep every query
+  dialect-neutral**: no `json_extract`, no `json_object`, no SQLite-only syntax. Fields the
+  sidebar needs are real columns (`chats.steps`, `agent_runs.mode/error/pending_status`)
+  maintained on write, not extracted from the payload in SQL.
 - Tailwind v4, shadcn primitives in `components/ui/**` (generated — do not hand-edit;
   they are lint-excluded), `@xyflow/react` for the canvas.
 - Auth is an application session cookie (`lib/server/auth.ts`, `app/auth.ts`); every row is
@@ -189,6 +194,9 @@ lib/workbench/google-auth.ts           authorize URL, ID-token claim checks, sta
 lib/workbench/password.ts              PBKDF2 hashing + digest (pure, so it is tested)
 lib/workbench/credentials.ts           email/name/password rules, safeNextPath (pure)
 lib/workbench/run-detail.ts            which runs ship their step log (pure)
+lib/workbench/models.ts                the model allowlist + DEFAULT_MODEL (pure)
+lib/workbench/finance-workflows.json   the seeded workflow library
+scripts/finance-workflows.ts           designs (and optionally tests) that library
 lib/workbench/digest.ts                canonical() + digest() used for every content hash
 components/{landing,auth-form}.tsx     public landing page and the sign-in/up form
 lib/workbench/engine.ts                the loop

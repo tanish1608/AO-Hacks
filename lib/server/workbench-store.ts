@@ -19,7 +19,7 @@ export async function listRunMetrics(
 ): Promise<RunMetric[]> {
   const rows = await database()
     .prepare(
-      "SELECT run_id,chat_id,experiment_id,arm,use_memory,status,attempts,passed,score,input_tokens,output_tokens,cost_usd,duration_ms,tool_calls,tool_errors,search_calls,search_cached,graph_digest,created_at FROM agent_run_metrics AS m WHERE chat_id=? AND owner_id=? AND NOT EXISTS (SELECT 1 FROM agent_runs AS r WHERE r.id=m.run_id AND r.owner_id=m.owner_id AND json_extract(r.payload,'$.mode')='manual') ORDER BY created_at ASC LIMIT ?",
+      "SELECT run_id,chat_id,experiment_id,arm,use_memory,status,attempts,passed,score,input_tokens,output_tokens,cost_usd,duration_ms,tool_calls,tool_errors,search_calls,search_cached,graph_digest,created_at FROM agent_run_metrics AS m WHERE chat_id=? AND owner_id=? AND NOT EXISTS (SELECT 1 FROM agent_runs AS r WHERE r.id=m.run_id AND r.owner_id=m.owner_id AND r.mode='manual') ORDER BY created_at ASC LIMIT ?",
     )
     .bind(chatId, owner, limit)
     .all<Record<string, string | number | null>>();
@@ -46,23 +46,56 @@ export async function listRunMetrics(
     createdAt: String(r.created_at),
   }));
 }
+/** The sidebar listing. Reads only the derived columns, never a payload: a
+ *  hundred chats with their full histories is megabytes. */
 export async function listChats(owner: string): Promise<WorkflowRow[]> {
   const rows = await database()
-      .prepare(
-        `SELECT c.id,c.title,c.updated_at,
-        COALESCE(json_array_length(json_extract(c.payload,'$.versions[#-1].workflow.nodes')),0) AS steps,
-        (SELECT json_object('id',r.id,'status',r.status,'mode',json_extract(r.payload,'$.mode'),
-          'error',json_extract(r.payload,'$.error'),'updatedAt',r.updated_at,
-          'pendingStatus',json_extract(r.payload,'$.pending.status'))
-         FROM agent_runs r WHERE r.chat_id=c.id AND r.owner_id=c.owner_id
-         ORDER BY CASE WHEN json_extract(r.payload,'$.pending.status') IN ('unknown','executing') THEN 0
-          WHEN r.status IN ('running','paused','awaiting_approval') THEN 1 ELSE 2 END,
-          r.created_at DESC,r.id DESC LIMIT 1) AS latest_run
-         FROM chats c WHERE c.owner_id=? ORDER BY c.updated_at DESC LIMIT 100`,
-      )
-      .bind(owner)
-      .all<{id:string;title:string;updated_at:string;steps:number;latest_run:string|null}>();
-  return rows.results.map(({latest_run,...row}) => ({...row,latestRun:latest_run ? JSON.parse(latest_run) : null}));
+    .prepare(
+      `SELECT c.id,c.title,c.updated_at,c.steps,
+        r.id AS run_id,r.status AS run_status,r.mode AS run_mode,
+        r.error AS run_error,r.updated_at AS run_updated,r.pending_status
+       FROM chats c
+       LEFT JOIN agent_runs r ON r.id=(
+         SELECT r2.id FROM agent_runs r2
+         WHERE r2.chat_id=c.id AND r2.owner_id=c.owner_id
+         ORDER BY CASE WHEN r2.pending_status IN ('unknown','executing') THEN 0
+           WHEN r2.status IN ('running','paused','awaiting_approval') THEN 1 ELSE 2 END,
+           r2.created_at DESC,r2.id DESC LIMIT 1)
+       WHERE c.owner_id=? ORDER BY c.updated_at DESC LIMIT 100`,
+    )
+    .bind(owner)
+    .all<{
+      id: string; title: string; updated_at: string; steps: number;
+      run_id: string | null; run_status: string | null; run_mode: string | null;
+      run_error: string | null; run_updated: string | null; pending_status: string | null;
+    }>();
+  return rows.results.map((r) => ({
+    id: r.id,
+    title: r.title,
+    updated_at: r.updated_at,
+    steps: Number(r.steps ?? 0),
+    latestRun: r.run_id
+      ? {
+          id: r.run_id,
+          status: r.run_status as Run['status'],
+          mode: r.run_mode,
+          error: r.run_error,
+          updatedAt: r.run_updated ?? r.updated_at,
+          pendingStatus: r.pending_status,
+        }
+      : null,
+  }));
+}
+/** The columns the listing reads, kept in step with the payload on every write. */
+function chatColumns(chat: Chat) {
+  return { steps: chat.versions.at(-1)?.workflow.nodes.length ?? 0 };
+}
+function runColumns(run: Run) {
+  return {
+    mode: run.mode ?? null,
+    error: run.error ?? null,
+    pendingStatus: run.pending?.status ?? null,
+  };
 }
 export async function loadChat(id: string, owner: string): Promise<Chat> {
   const row = await database()
@@ -75,7 +108,7 @@ export async function loadChat(id: string, owner: string): Promise<Chat> {
 export async function insertChat(chat: Chat, owner: string) {
   await database()
     .prepare(
-      'INSERT INTO chats(id,owner_id,title,revision,payload,created_at,updated_at) VALUES(?,?,?,?,?,?,?)',
+      'INSERT INTO chats(id,owner_id,title,revision,payload,steps,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',
     )
     .bind(
       chat.id,
@@ -83,6 +116,7 @@ export async function insertChat(chat: Chat, owner: string) {
       chat.title,
       chat.revision,
       JSON.stringify(chat),
+      chatColumns(chat).steps,
       chat.createdAt,
       chat.updatedAt,
     )
@@ -138,12 +172,13 @@ export async function saveChat(
   const payload = JSON.stringify(chat);
   const statement = database()
     .prepare(
-      `UPDATE chats SET title=?,revision=?,payload=?,updated_at=?,lease_token=?,lease_until=? WHERE id=? AND owner_id=? AND lease_token=? AND revision=? AND lease_until>?`,
+      `UPDATE chats SET title=?,revision=?,payload=?,steps=?,updated_at=?,lease_token=?,lease_until=? WHERE id=? AND owner_id=? AND lease_token=? AND revision=? AND lease_until>?`,
     )
     .bind(
       chat.title,
       chat.revision,
       payload,
+      chatColumns(chat).steps,
       chat.updatedAt,
       keepLease ? token : null,
       keepLease ? Date.now() + 180000 : null,
@@ -159,7 +194,7 @@ export async function saveChat(
     queries.push(
       database()
         .prepare(
-          `INSERT INTO agent_runs(id,chat_id,owner_id,status,payload,created_at,updated_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chats WHERE id=? AND owner_id=? AND revision=?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,payload=excluded.payload,updated_at=excluded.updated_at`,
+          `INSERT INTO agent_runs(id,chat_id,owner_id,status,payload,mode,error,pending_status,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chats WHERE id=? AND owner_id=? AND revision=?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,payload=excluded.payload,mode=excluded.mode,error=excluded.error,pending_status=excluded.pending_status,updated_at=excluded.updated_at`,
         )
         .bind(
           run.id,
@@ -167,6 +202,9 @@ export async function saveChat(
           owner,
           run.status,
           JSON.stringify(run),
+          runColumns(run).mode,
+          runColumns(run).error,
+          runColumns(run).pendingStatus,
           run.createdAt,
           run.updatedAt,
           chat.id,

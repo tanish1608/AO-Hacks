@@ -18,13 +18,22 @@ export interface ModelChoice {
   outputPrice: number;
   contextTokens: number;
 }
-export const DEFAULT_MODEL = 'openai/gpt-6-sol';
+export const DEFAULT_MODEL = 'google/gemini-3.8-flash';
 export const MODELS: ModelChoice[] = [
+  {
+    id: 'google/gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
+    maker: 'Google',
+    note: 'Fast and inexpensive, and the quickest to respond of the models measured here. The default.',
+    inputPrice: 0.75,
+    outputPrice: 3.75,
+    contextTokens: 1_048_576,
+  },
   {
     id: 'openai/gpt-6-sol',
     name: 'GPT-6 Sol',
     maker: 'OpenAI',
-    note: 'Balanced default. Handles multi-step design and evaluation well.',
+    note: 'Slower but strong on multi-step design and evaluation.',
     inputPrice: 2,
     outputPrice: 10,
     contextTokens: 1_050_000,
@@ -55,15 +64,6 @@ export const MODELS: ModelChoice[] = [
     inputPrice: 4,
     outputPrice: 20,
     contextTokens: 1_000_000,
-  },
-  {
-    id: 'google/gemini-3.8-flash',
-    name: 'Gemini 3.8 Flash',
-    maker: 'Google',
-    note: 'Fast and inexpensive. The model behind this project’s early evidence.',
-    inputPrice: 0.75,
-    outputPrice: 3.75,
-    contextTokens: 1_048_576,
   },
   {
     id: 'x-ai/grok-4.7',

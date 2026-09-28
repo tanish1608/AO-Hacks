@@ -54,6 +54,10 @@ export const chats = sqliteTable(
     title: text('title').notNull(),
     revision: integer('revision').notNull().default(0),
     payload: text('payload').notNull(),
+    // Derived from payload on write. The sidebar listing used SQLite JSON
+    // functions to read these without downloading every payload; a real column
+    // is faster and, unlike json_extract, is the same SQL on any engine.
+    steps: integer('steps').notNull().default(0),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
     leaseToken: text('lease_token'),
@@ -71,6 +75,10 @@ export const agentRuns = sqliteTable(
     ownerId: text('owner_id').notNull(),
     status: text('status').notNull(),
     payload: text('payload').notNull(),
+    // Also derived on write, for the same reason.
+    mode: text('mode'),
+    error: text('error'),
+    pendingStatus: text('pending_status'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },

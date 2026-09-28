@@ -95,7 +95,47 @@ on either platform, so the collapse happens later in the Linux build. Keeping th
 working directory away from `app` removes the ambiguity instead of relying on
 which normalization runs where. Do not move it back.
 
-## Data durability, and its limit
+## Data: Cloud SQL
+
+The service runs on **Cloud SQL for PostgreSQL** (`foundry-pg`, `db-g1-small`,
+`us-central1`). Cloud Run reaches it through the built-in Cloud SQL Auth Proxy,
+so the database has no authorized networks and is not reachable from the
+internet. Set `DATABASE_URL` and the adapter uses Postgres; leave it unset and
+it falls back to the SQLite file described below, which is still what local
+development uses.
+
+`server/d1-postgres.mjs` serves the same D1 surface the application already
+speaks — `prepare/bind/first/all/run` and a transactional `batch` — so the
+queries and the lease/revision concurrency control are unchanged. It handles the
+two things that genuinely differ: `?` placeholders become `$1`, `$2`
+(carefully, since a `?` inside a string literal must not be renumbered — that
+would silently bind the wrong values to the wrong columns), and a `batch` pins a
+single pooled client so its statements share one transaction.
+
+The sidebar listing used to read `json_extract` and `json_array_length`, which
+do not exist in Postgres. Those fields are now real columns (`chats.steps`,
+`agent_runs.mode/error/pending_status`) maintained on write, which is both
+faster and the same SQL on either engine. No query anywhere uses a JSON
+function now.
+
+**This is what allows more than one instance.** The SQLite path keeps the
+database in the container's own filesystem, so a second instance would hold a
+separate copy and the last snapshot back to Cloud Storage would silently
+discard the other's work — which is why it was pinned to `--max-instances=1`.
+
+To copy an existing SQLite database in, run the proxy locally and:
+
+```sh
+cloud-sql-proxy --port 5432 ao-hacks:us-central1:foundry-pg &
+DATABASE_URL='postgres://foundry:PASSWORD@127.0.0.1:5432/foundry' \
+  node scripts/migrate-to-postgres.mjs .data/foundry.sqlite --apply
+```
+
+It copies parents before children, inserts with `ON CONFLICT DO NOTHING` so a
+re-run resumes rather than overwriting live rows, and fills the derived columns
+from each payload when the source predates them.
+
+## The previous SQLite path, and its limit
 
 SQLite lives on the instance filesystem, which does not survive a restart, so
 it is restored from `gs://ao-hacks-foundry-db` at boot and snapshotted back

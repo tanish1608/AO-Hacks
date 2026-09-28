@@ -114,7 +114,8 @@ for (const fixture of fixtures) {
     let chat = await design(createChat(crypto.randomUUID()), fixture.prompt, deps, fixture.apps);
     chat.title = fixture.title;
     chat.selectedApps = fixture.apps;
-    chat.settings = { ...chat.settings, model: DEFAULT_MODEL, maxIterations: 2 };
+    // No pinned model: the library follows whatever the deployment default is.
+    chat.settings = { ...chat.settings, maxIterations: 2 };
     const workflow = chat.versions.at(-1)!.workflow;
     const runs: Run[] = [];
 

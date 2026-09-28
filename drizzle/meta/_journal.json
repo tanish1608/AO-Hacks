@@ -29,6 +29,20 @@
       "when": 1790523732607,
       "tag": "0003_lowly_the_twelve",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790607754002,
+      "tag": "0004_cute_roulette",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790607761144,
+      "tag": "0005_freezing_master_chief",
+      "breakpoints": true
     }
   ]
 }

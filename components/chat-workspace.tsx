@@ -11,6 +11,7 @@ import {
   GitBranch,
   Layers3,
   LoaderCircle,
+  LogOut,
   MessageSquare,
   Play,
   Plus,
@@ -161,6 +162,10 @@ const appTileStyle: React.CSSProperties = {
   padding: '13px 6px 10px',
   textAlign: 'center',
 };
+async function signOut() {
+  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  window.location.assign('/');
+}
 function rememberTask(id: string | null) {
   const url = new URL(window.location.href);
   if (id) url.searchParams.set('task', id);
@@ -190,7 +195,13 @@ function TaskActionButton({
     />
   );
 }
-export default function ChatWorkspace() {
+export default function ChatWorkspace({
+  accountName,
+  accountEmail,
+}: {
+  accountName: string;
+  accountEmail: string;
+}) {
   const [rows, setRows] = useState<ChatRow[]>([]),
     [snapshot, setSnapshot] = useState<Snapshot | null>(null),
     [draft, setDraft] = useState(''),
@@ -737,6 +748,25 @@ export default function ChatWorkspace() {
                 <Settings2 />
                 <span>Settings & integrations</span>
               </TaskButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <div className="account-menu">
+                <span className="account-avatar" aria-hidden>
+                  {accountName.trim().charAt(0) || accountEmail.charAt(0)}
+                </span>
+                <div>
+                  <strong>{accountName}</strong>
+                  <small title={accountEmail}>{accountEmail}</small>
+                </div>
+                <button
+                  className="account-signout"
+                  title="Sign out"
+                  aria-label="Sign out"
+                  onClick={() => void signOut()}
+                >
+                  <LogOut size={15} />
+                </button>
+              </div>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>

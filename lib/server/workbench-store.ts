@@ -134,6 +134,7 @@ export async function saveChat(
     run.revision++;
     run.updatedAt = chat.updatedAt;
   }
+  const payload = JSON.stringify(chat);
   const statement = database()
     .prepare(
       `UPDATE chats SET title=?,revision=?,payload=?,updated_at=?,lease_token=?,lease_until=? WHERE id=? AND owner_id=? AND lease_token=? AND revision=? AND lease_until>?`,
@@ -141,7 +142,7 @@ export async function saveChat(
     .bind(
       chat.title,
       chat.revision,
-      JSON.stringify(chat),
+      payload,
       chat.updatedAt,
       keepLease ? token : null,
       keepLease ? Date.now() + 180000 : null,
@@ -157,7 +158,7 @@ export async function saveChat(
     queries.push(
       database()
         .prepare(
-          `INSERT INTO agent_runs(id,chat_id,owner_id,status,payload,created_at,updated_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chats WHERE id=? AND owner_id=? AND revision=? AND payload=?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,payload=excluded.payload,updated_at=excluded.updated_at`,
+          `INSERT INTO agent_runs(id,chat_id,owner_id,status,payload,created_at,updated_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chats WHERE id=? AND owner_id=? AND revision=?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,payload=excluded.payload,updated_at=excluded.updated_at`,
         )
         .bind(
           run.id,
@@ -170,7 +171,6 @@ export async function saveChat(
           chat.id,
           owner,
           chat.revision,
-          JSON.stringify(chat),
         ),
     );
   // Derived chat/run state, so it belongs in the same guarded batch as the run.
@@ -225,9 +225,13 @@ function chatToolkits(chat: Chat) {
     ]),
   ];
 }
-export async function snapshot(chat: Chat, owner: string) {
+/**
+ * `loaded` is the run list the caller already read this request. Re-reading it
+ * here meant every advance step parsed the whole trace history twice.
+ */
+export async function snapshot(chat: Chat, owner: string, loaded?: Run[]) {
   const [runs, metrics, knowledge] = await Promise.all([
-    listRuns(chat.id, owner),
+    loaded ?? listRuns(chat.id, owner),
     listRunMetrics(chat.id, owner).catch(() => []),
     listKnowledge(owner, chatToolkits(chat)).catch(() => []),
   ]);

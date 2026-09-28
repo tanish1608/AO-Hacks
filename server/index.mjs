@@ -27,10 +27,6 @@ if (applied.length) console.log(`applied migrations: ${applied.join(', ')}`);
 // Only the app's own configuration crosses into the worker; the rest of the
 // process environment stays out of application code.
 const CONFIG = [
-  // AUTH_MODE must reach the app: without it the header-trusting path stays
-  // live behind IAP and anyone could forge an identity.
-  'AUTH_MODE',
-  'IAP_AUDIENCE',
   'GEMINI_API_KEY',
   'OPENROUTER_API_KEY',
   'OPENROUTER_SITE_URL',

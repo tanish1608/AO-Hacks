@@ -11,7 +11,9 @@ import { advanceResilient } from '../lib/workbench/recovery.ts';
 import { workbenchModel } from '../lib/workbench/model.ts';
 import { validateCases, checkOutput } from '../lib/workbench/improvement.ts';
 import { publication } from '../lib/workbench/sharing.ts';
-import { digest } from '../lib/engine/runtime.ts';
+import { digest } from '../lib/workbench/digest.ts';
+import { runMetrics } from '../lib/workbench/metrics.ts';
+const TERMINAL = ['completed', 'exhausted', 'blocked', 'failed'];
 import type { Chat, Run } from '../lib/workbench/types.ts';
 const fixtures = JSON.parse(
   readFileSync('lib/workbench/startup-demos.json', 'utf8'),
@@ -76,7 +78,7 @@ function save(chat: Chat, runs: Run[]) {
       chat.createdAt,
       chat.updatedAt,
     );
-    for (const r of runs)
+    for (const r of runs) {
       db.prepare(
         'INSERT INTO agent_runs(id,chat_id,owner_id,status,payload,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,payload=excluded.payload,updated_at=excluded.updated_at',
       ).run(
@@ -88,6 +90,19 @@ function save(chat: Chat, runs: Run[]) {
         r.createdAt,
         r.updatedAt,
       );
+      // The application writes this projection inside saveChat. A seeded
+      // workspace that skipped it opened with an empty Learning tab.
+      if (r.mode === 'manual' || !TERMINAL.includes(r.status)) continue;
+      const m = runMetrics(r);
+      db.prepare(
+        'INSERT INTO agent_run_metrics(run_id,owner_id,chat_id,experiment_id,arm,use_memory,status,attempts,passed,score,input_tokens,output_tokens,cost_usd,duration_ms,tool_calls,tool_errors,search_calls,search_cached,graph_digest,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET status=excluded.status,attempts=excluded.attempts,passed=excluded.passed,score=excluded.score,input_tokens=excluded.input_tokens,output_tokens=excluded.output_tokens,cost_usd=excluded.cost_usd,duration_ms=excluded.duration_ms,tool_calls=excluded.tool_calls,tool_errors=excluded.tool_errors,search_calls=excluded.search_calls,search_cached=excluded.search_cached',
+      ).run(
+        m.runId, owner, m.chatId, m.experimentId, m.arm, m.useMemory ? 1 : 0,
+        m.status, m.attempts, m.passed ? 1 : 0, m.score, m.inputTokens,
+        m.outputTokens, m.costUsd, m.durationMs, m.toolCalls, m.toolErrors,
+        m.searchCalls, m.searchCached, m.graphDigest, m.createdAt,
+      );
+    }
   })();
 }
 const reports = await Promise.all(

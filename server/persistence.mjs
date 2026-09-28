@@ -59,19 +59,42 @@ export async function restore(file) {
     throw error;
   }
 }
-async function upload(file) {
+/**
+ * A dropped snapshot is silent data loss: the only other copy lives on an
+ * instance filesystem that does not survive. Retry, and keep the failure
+ * visible so shutdown knows it still owes an upload.
+ */
+let pendingSince = null;
+export function snapshotOverdue() {
+  return pendingSince;
+}
+async function upload(file, attempts = 3) {
   const target = await bucket();
   if (!target) return;
-  try {
-    if (!currentDatabase)
-      throw new Error('Snapshot database is not initialized');
-    const data = await snapshotBytes(currentDatabase, file);
-    await target.file(OBJECT).save(data, {
-      contentType: 'application/x-sqlite3',
-      resumable: false,
-    });
-  } catch (error) {
-    console.error('snapshot upload failed', error);
+  for (let attempt = 1; ; attempt++) {
+    try {
+      if (!currentDatabase)
+        throw new Error('Snapshot database is not initialized');
+      const data = await snapshotBytes(currentDatabase, file);
+      await target.file(OBJECT).save(data, {
+        contentType: 'application/x-sqlite3',
+        resumable: false,
+      });
+      if (pendingSince)
+        console.log(`snapshot recovered after ${Date.now() - pendingSince}ms`);
+      pendingSince = null;
+      return;
+    } catch (error) {
+      if (attempt >= attempts) {
+        pendingSince ??= Date.now();
+        console.error(
+          `snapshot upload failed after ${attempts} attempts; database is only on this instance`,
+          error,
+        );
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+    }
   }
 }
 export function scheduleSnapshot() {
@@ -89,7 +112,7 @@ export async function shutdown(db, file) {
     console.error('checkpoint failed', error);
   }
   await inFlight;
-  if (BUCKET && existsSync(file)) await upload(file);
+  if (BUCKET && existsSync(file)) await upload(file, 5);
   try {
     db.close();
   } catch {}

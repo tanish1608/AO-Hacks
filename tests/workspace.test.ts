@@ -37,12 +37,11 @@ void test('execution receives frozen workflow rules, not a later edit',async()=>
   const deps: Dependencies={model:{async json<T>(_system:string,input:unknown){assert.deepEqual((input as {approvedBusinessRules:string[]}).approvedBusinessRules,['Mark missing dates unspecified']);return{value:{action:'finish',output:'Date: unspecified',toolSlug:'',argumentsJson:'{}',reason:''} as T,usage:emptyUsage(),durationMs:1};}},tools:null};
   const result=await advanceChatRun(c,run,deps);assert.equal(result.run.attempts[0].states[0].status,'done');
 });
-void test('standalone runtime rejects public header trust and shared open identity',()=>{
+void test('standalone runtime binds loopback unless a host is chosen',()=>{
+  // Identity is a session cookie this application issues, so a public bind is
+  // safe; it stays opt-in so a laptop does not serve the workspace by default.
   assert.equal(runtimePolicy({}).host,'127.0.0.1');
-  assert.throws(()=>runtimePolicy({AUTH_MODE:'open'}),/no longer supported/);
-  assert.throws(()=>runtimePolicy({AUTH_MODE:'sites',HOST:'0.0.0.0'}),/cannot trust/);
-  assert.throws(()=>runtimePolicy({AUTH_MODE:'iap'}),/IAP_AUDIENCE/);
-  assert.equal(runtimePolicy({AUTH_MODE:'iap',IAP_AUDIENCE:'/projects/test'}).host,'0.0.0.0');
+  assert.equal(runtimePolicy({HOST:'0.0.0.0'}).host,'0.0.0.0');
 });
 void test('business rules are included in the cross-workflow leakage filter',async()=>{
   const c=chat();c.rules=['Zoho Books: customer special billing terms require a purchase order'];

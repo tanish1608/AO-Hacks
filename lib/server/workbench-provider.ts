@@ -3,7 +3,7 @@ import { Client } from 'langsmith';
 import { modelSettings, workbenchModel } from '../workbench/model';
 import { ComposioGateway } from '../workbench/composio';
 import type { Chat, Dependencies, Run } from '../workbench/types';
-import { digest } from '../engine/runtime';
+import { digest } from '../workbench/digest';
 import { database } from './store';
 import { HttpError } from './security';
 import { knowledgeStore } from './tool-knowledge-store';
@@ -220,7 +220,7 @@ export async function dependencies(
           extra: {
             metadata: {
               foundry_run_id: runId,
-              ls_provider: 'google_genai',
+              ls_provider: modelSettings(e).provider,
               ls_model_name: t.usage.model,
               node_id: t.nodeId,
               kind: t.kind,

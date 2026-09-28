@@ -8,7 +8,7 @@ RUN npm run build
 
 FROM node:22-slim AS runtime
 WORKDIR /app
-ENV NODE_ENV=production PORT=8080 DATA_DIR=/data
+ENV NODE_ENV=production PORT=8080 DATA_DIR=/data HOST=0.0.0.0
 # The bundle inlines its own dependencies, so only the adapter's two packages
 # are installed here. better-sqlite3 is native and needs a toolchain to build.
 COPY server/runtime/package.json ./package.json

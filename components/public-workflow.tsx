@@ -221,7 +221,7 @@ export default function PublicWorkflow({
         nodes: info.steps.map((step) => ({ ...step, instruction: '' })),
       }
     : undefined;
-  const signInUrl = `/signin-with-chatgpt?return_to=${encodeURIComponent(`/w/${id}`)}`;
+  const signInUrl = `/login?next=${encodeURIComponent(`/w/${id}`)}`;
   return (
     <main className="public-workflow">
       <header>

@@ -1,6 +1,5 @@
-import type { Model, ModelResult } from './types.ts';
+import type { Model, ModelResult, Usage } from './types.ts';
 import { addUsage, emptyUsage } from './types.ts';
-import type { Usage } from '../engine/types.ts';
 import { Validator } from '@cfworker/json-schema';
 
 export type ModelEnvironment = Record<string, string | undefined>;

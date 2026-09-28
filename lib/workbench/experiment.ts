@@ -1,4 +1,4 @@
-import { digest } from '../engine/runtime.ts';
+import { digest } from './digest.ts';
 import type { Chat, Experiment, ExperimentArm, Run, Knowledge } from './types.ts';
 /** Hold tool knowledge constant in both arms to isolate the task-memory effect. */
 export function frozenKnowledge(experiment?: Experiment): Knowledge {

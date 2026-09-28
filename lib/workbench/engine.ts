@@ -29,7 +29,7 @@ import {
   retrieveMemory,
   validateWorkflow,
 } from './validation.ts';
-import { digest } from '../engine/runtime.ts';
+import { digest } from './digest.ts';
 import {
   extractToolKnowledge,
   formatKnowledgeForPrompt,
@@ -429,8 +429,10 @@ async function execute(chat: Chat, run: Run, deps: Dependencies) {
       state.output = state.error;
       run.phase = 'evaluate';
       await learnFromTraces(deps, run, a, [t.id]);
+      return;
     }
-    return;
+    // Authorization re-checked and the reuse recorded, so carry on into this
+    // node's turn. Returning here spent a whole request on a bookkeeping step.
   }
   if (node.toolkits.length && state.tools.length === 0) {
     if (!deps.tools) {

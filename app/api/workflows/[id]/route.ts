@@ -2,10 +2,12 @@ import { authorize, failure, HttpError, json } from '@/lib/server/security';
 import { loadPublication } from '@/lib/server/workflow-sharing';
 import { database } from '@/lib/server/store';
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    // Shared workflows are account-only, so the description is too.
+    await authorize(request);
     const row = await loadPublication((await params).id),
       p = row.publication;
     return json({

@@ -38,7 +38,7 @@ import {
   startArm,
 } from '@/lib/workbench/experiment';
 import { validateWorkflow, retrieveMemory } from '@/lib/workbench/validation';
-import { digest } from '@/lib/engine/runtime';
+import { digest } from '@/lib/workbench/digest';
 import type { Chat, Run } from '@/lib/workbench/types';
 import { listKnowledge } from '@/lib/server/tool-knowledge-store';
 import { cleanRules } from '@/lib/workbench/workspace';
@@ -470,7 +470,14 @@ export async function POST(
     chat.versions = chat.versions.slice(-30);
     chat.messages = retainMessages(chat.messages);
     await saveChat(chat, owner, token, run);
-    return json(await snapshot(chat, owner));
+    // Reuse the runs already read for this request, with the one just saved
+    // folded in, instead of parsing every trace history a second time.
+    const current = run
+      ? [run, ...runs.filter((r) => r.id !== run!.id)].sort((a, b) =>
+          b.createdAt.localeCompare(a.createdAt),
+        )
+      : runs;
+    return json(await snapshot(chat, owner, current));
   } catch (e) {
     if (token && owner && id)
       await releaseChat(id, owner, token).catch(() => {});

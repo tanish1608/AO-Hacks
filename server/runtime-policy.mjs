@@ -1,12 +1,12 @@
-/** Refuse the old shared public workspace before opening any database or socket. */
+/**
+ * Resolve the listening interface before opening any socket.
+ *
+ * Identity now comes from a session cookie the application itself issues, so
+ * a public interface is safe; it was not when the adapter trusted an upstream
+ * proxy's headers. Binding stays opt-in so `npm run serve` on a laptop does
+ * not quietly expose a workspace on the local network.
+ */
 export function runtimePolicy(config) {
-  const mode = config.AUTH_MODE || 'sites';
-  if (!['sites', 'iap'].includes(mode)) throw new Error('AUTH_MODE must be sites or iap. Shared open workspaces are no longer supported.');
-  const host = config.HOST || (mode === 'iap' ? '0.0.0.0' : '127.0.0.1');
-  const loopback = ['127.0.0.1', '::1', 'localhost'].includes(host);
-  if (mode === 'sites' && !loopback)
-    throw new Error('The Node adapter cannot trust Sites identity headers on a public interface. Configure verified authentication before exposing it.');
-  if (mode === 'iap' && !config.IAP_AUDIENCE)
-    throw new Error('IAP_AUDIENCE is required for verified authentication.');
-  return { host, mode };
+  const host = config.HOST || '127.0.0.1';
+  return { host };
 }

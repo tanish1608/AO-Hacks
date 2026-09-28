@@ -1,5 +1,5 @@
 import type { Chat, Run, Workflow } from './types.ts';
-import { digest } from '../engine/runtime.ts';
+import { digest } from './digest.ts';
 import { cleanRules } from './workspace.ts';
 
 export type RegressionCheck = {

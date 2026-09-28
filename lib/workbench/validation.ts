@@ -6,7 +6,7 @@ import type {
   Memory,
   Workflow,
 } from './types.ts';
-import { digest } from '../engine/runtime.ts';
+import { digest } from './digest.ts';
 import { needsZohoDraftDelivery, verifiedZohoDrafts } from './zoho-tools.ts';
 const text = (v: unknown, max: number) =>
   typeof v === 'string' && v.trim().length > 0 && v.length <= max;

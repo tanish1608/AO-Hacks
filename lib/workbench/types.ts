@@ -1,4 +1,12 @@
-import type { Json, Usage } from '../engine/types.ts';
+/** Any JSON-serializable value; tool arguments and results are stored as these. */
+export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+  /** Null when pricing is unknown for the call. Never report an unpriced call as free. */
+  costUsd: number | null;
+  model: string | null;
+}
 export interface AgentNode {
   id: string;
   name: string;

@@ -6,39 +6,38 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
-export const experiments = sqliteTable(
-  'experiments',
+export const users = sqliteTable(
+  'users',
   {
     id: text('id').primaryKey(),
-    ownerId: text('owner_id').notNull(),
+    email: text('email').notNull(),
     name: text('name').notNull(),
-    status: text('status').notNull(),
-    revision: integer('revision').notNull().default(0),
-    payload: text('payload').notNull(),
+    // pbkdf2$<iterations>$<salt>$<hash>, all base64. Never a bare digest.
+    passwordHash: text('password_hash').notNull(),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
-    leaseToken: text('lease_token'),
-    leaseUntil: integer('lease_until'),
   },
-  (t) => [index('idx_experiments_owner_created').on(t.ownerId, t.createdAt)],
+  (t) => [uniqueIndex('idx_users_email').on(t.email)],
 );
-export const releases = sqliteTable(
-  'releases',
+export const sessions = sqliteTable(
+  'sessions',
   {
+    // SHA-256 of the cookie token. A stolen database row cannot be replayed
+    // as a cookie, the same reason passwords are not stored in the clear.
     id: text('id').primaryKey(),
-    ownerId: text('owner_id').notNull(),
-    experimentId: text('experiment_id')
+    userId: text('user_id')
       .notNull()
-      .references(() => experiments.id),
-    architectureDigest: text('architecture_digest').notNull(),
-    payload: text('payload').notNull(),
+      .references(() => users.id),
     createdAt: text('created_at').notNull(),
+    expiresAt: text('expires_at').notNull(),
   },
-  (t) => [
-    index('idx_releases_owner_created').on(t.ownerId, t.createdAt),
-    uniqueIndex('idx_releases_owner_experiment').on(t.ownerId, t.experimentId),
-  ],
+  (t) => [index('idx_sessions_user').on(t.userId, t.expiresAt)],
 );
+export const authThrottle = sqliteTable('auth_throttle', {
+  key: text('key').primaryKey(),
+  failures: integer('failures').notNull().default(0),
+  resetAt: text('reset_at').notNull(),
+});
 export const chats = sqliteTable(
   'chats',
   {

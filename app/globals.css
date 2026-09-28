@@ -3030,6 +3030,7 @@ h3 {
 .wb-shell,
 .wb-dialog,
 [data-slot='sidebar'][data-mobile='true'],
+.model-picker-menu,
 .app-picker-menu {
   --background: #fff;
   --foreground: #242932;
@@ -4628,7 +4629,9 @@ body:has(.public-workflow) { background: #fafbfc; }
 .model-picker-trigger { display:flex; align-items:center; gap:5px; font-size:11.5px !important;
   color:#7b8698 !important; padding:3px 7px !important; height:auto !important; max-width:190px; }
 .model-picker-trigger > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.model-picker-menu { width:min(94vw,360px); max-height:60dvh; overflow-y:auto; }
+.model-picker-menu { width:min(94vw,360px); max-height:min(520px,70dvh); overflow:auto;
+  background:#fff !important; color:#4d5e79; border:1px solid #e0e6f0 !important;
+  border-radius:10px; padding:6px; box-shadow:0 10px 36px #23395719; }
 .model-picker-item { align-items:flex-start !important; padding:9px 30px 9px 9px !important; border-radius:6px !important; }
 .model-picker-item strong { font-size:12px; font-weight:600; display:block; color:#46566d; }
 .model-picker-item strong em { font-style:normal; font-weight:400; color:#9aa5b6; margin-left:5px; }

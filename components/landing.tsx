@@ -9,6 +9,7 @@ import {
   Share2,
 } from 'lucide-react';
 import BrandLogo from './brand-logo';
+import IntegrationMarquee from './integration-marquee';
 import { Button } from './ui/button';
 
 const STEPS = [
@@ -121,6 +122,8 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
             ))}
           </div>
         </section>
+
+        <IntegrationMarquee />
 
         <section className="landing-section">
           <h2>Built to be checked</h2>

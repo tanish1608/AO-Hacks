@@ -12,7 +12,10 @@ import {
   Layers3,
   LoaderCircle,
   LogOut,
+  MailCheck,
   MessageSquare,
+  Presentation,
+  ReceiptText,
   Play,
   Plus,
   RotateCcw,
@@ -26,7 +29,7 @@ import WorkflowTests from './workflow-tests';
 import WorkflowPublish from './workflow-publish';
 import ActionReview from './action-review';
 import { type WorkflowRow } from '@/lib/workbench/workspace';
-import startupDemos from '@/lib/workbench/startup-demos.json';
+import financeWorkflows from '@/lib/workbench/finance-workflows.json';
 import { combineRunInput, type InputDocument } from '@/lib/workbench/documents';
 import ReactMarkdown from 'react-markdown';
 import WorkflowOutput from './workflow-output';
@@ -40,6 +43,7 @@ import { emptyUsage } from '@/lib/workbench/types';
 import type { RunMetric, ToolKnowledgeRecord } from '@/lib/workbench/types';
 import { ablation, learningTrend, median } from '@/lib/workbench/metrics';
 import { MAX_PAIRS } from '@/lib/workbench/experiment';
+import { DEFAULT_MODEL, MODELS, modelChoice } from '@/lib/workbench/models';
 import { PairedBars, TrendLine } from './learning-charts';
 import { ALL_APPS, APP_CATALOG, appDefinition } from '@/lib/workbench/apps';
 import { Button } from './ui/button';
@@ -117,10 +121,16 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
 const percent = (x: number) => `${Math.round(x * 100)}%`;
 const money = (x: number | null) =>
   x === null ? 'Unpriced' : `$${x.toFixed(4)}`;
-const examples = startupDemos.map((demo, i) => ({
-  ...demo,
-  icon: [Layers3, FileText, GitBranch][i],
-}));
+/** Three the home screen offers first: one that needs connected accounts, one
+ *  that produces an artifact, and one that runs with nothing connected. */
+const STARTERS: Record<string, typeof Layers3> = {
+  'campaign-replies': MailCheck,
+  'docx-to-deck': Presentation,
+  'invoice-exceptions': ReceiptText,
+};
+const examples = financeWorkflows
+  .filter((w) => w.id in STARTERS)
+  .map((w) => ({ ...w, icon: STARTERS[w.id] }));
 function TaskButton({
   onClick,
   ...props
@@ -229,6 +239,7 @@ export default function ChatWorkspace({
     [readingDocument, setReadingDocument] = useState(false),
     [manualStarting, setManualStarting] = useState(false),
     [resultsId, setResultsId] = useState('');
+  const [limitModel, setLimitModel] = useState(DEFAULT_MODEL);
   const [abInput, setAbInput] = useState('');
   const [abPairs, setAbPairs] = useState(2);
   const [allAppsOpen, setAllAppsOpen] = useState(false);
@@ -864,11 +875,17 @@ export default function ChatWorkspace({
               <h1>What work do you want to repeat?</h1>
               <p>
                 Describe the input, the result you need, and any exceptions.
-                <br className="desktop-break" /> We’ll build a workflow you can
-                test and reuse.
+                <br className="desktop-break" /> Foundry designs a team of
+                agents to do it, tests them, and shows you the evidence.
               </p>
             </div>
             <div className="home-compose">{composer}</div>
+            <p className="home-caption">
+              <Layers3 size={13} />
+              Every workflow becomes a graph of specialized agents you can open,
+              edit, and re-test — each one with its own instruction and its own
+              connected apps.
+            </p>
             <div className="starter-grid">
               {examples.map(({ icon: Icon, ...e }) => (
                 <button
@@ -1060,6 +1077,7 @@ export default function ChatWorkspace({
                           );
                           setLimitAttempts(chat.settings.maxIterations);
                           setLimitTools(chat.settings.maxToolCalls);
+                          setLimitModel(chat.settings.model ?? DEFAULT_MODEL);
                           setLimitsOpen(true);
                         }}
                       >
@@ -1552,18 +1570,14 @@ export default function ChatWorkspace({
                           onLoading={setReadingDocument}
                           disabled={busy || Boolean(activeRun)}
                         />
-                        {startupDemos
-                          .filter((d) => d.title === chat.title)
+                        {financeWorkflows
+                          .filter((d) => d.title === chat.title && 'sample' in d)
                           .map((d) => (
                             <div className="demo-input-actions" key={d.id}>
-                              <Button
-                                variant="outline"
-                                disabled={busy || Boolean(activeRun)}
-                                onClick={() => setManualInput(d.cases[0].input)}
+                              <a
+                                href={`/demos/${(d as { sample: string }).sample}`}
+                                download
                               >
-                                Use sample input
-                              </Button>
-                              <a href={`/demos/${d.id}.txt`} download>
                                 Download sample packet
                               </a>
                               <small>
@@ -1861,6 +1875,26 @@ export default function ChatWorkspace({
               onChange={(e) => setLimitAttempts(Number(e.target.value))}
             />
           </label>
+          <label htmlFor="wb-field-model" className="field-label">
+            Model
+            <NativeSelect
+              id="wb-field-model"
+              value={limitModel}
+              onChange={(e) => setLimitModel(e.target.value)}
+            >
+              {MODELS.map((m) => (
+                <NativeSelectOption key={m.id} value={m.id}>
+                  {m.name} · {m.maker}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            <small className="model-note">
+              {modelChoice(limitModel)?.note} Roughly $
+              {modelChoice(limitModel)?.inputPrice}/M in, $
+              {modelChoice(limitModel)?.outputPrice}/M out. Recorded cost always
+              comes from what the provider actually billed.
+            </small>
+          </label>
           <label htmlFor="wb-field-5" className="field-label">
             Tool-call budget for the entire run
             <Input
@@ -1909,6 +1943,7 @@ export default function ChatWorkspace({
                 target: limitTarget / 100,
                 maxIterations: limitAttempts,
                 maxToolCalls: limitTools,
+                model: limitModel,
               }).then((data) => {
                 if (data) setLimitsOpen(false);
               })

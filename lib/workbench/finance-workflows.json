@@ -1,0 +1,85 @@
+[
+  {
+    "id": "campaign-replies",
+    "title": "Track campaign replies in a sheet",
+    "description": "Read Gmail for replies to an outreach campaign and mark each one in the tracking spreadsheet.",
+    "apps": [
+      "gmail",
+      "googlesheets"
+    ],
+    "prompt": "Every weekday I need to know who replied to my outreach campaign and have the tracker updated. Read my Gmail for replies to messages in the campaign, match each reply back to the prospect row in the Google Sheet tracker by email address, and update that row: set Replied to yes, write the reply date, and paste a one-sentence summary of what they said plus a classification of interested, not interested, referred elsewhere, or asked a question. Leave rows with no reply untouched. Never send, archive or delete any email, and never invent a reply that is not in the mailbox. If a reply comes from an address that is not in the tracker, list it separately as an unmatched reply rather than guessing which row it belongs to. Return a JSON object with fields replies_found, rows_updated, unmatched, and a short summary."
+  },
+  {
+    "id": "docx-to-deck",
+    "title": "Turn a document into a sourced deck",
+    "description": "Convert a DOCX into a Google Slides presentation, with every claim backed by a searched reference.",
+    "apps": [
+      "googledrive",
+      "googleslides",
+      "composio_search"
+    ],
+    "prompt": "I upload a Word document and want a presentation built from it. Read the DOCX from Google Drive, work out the argument it is making, and design a deck of 8 to 14 slides with a clear narrative: a title slide, an agenda, one idea per content slide with a short headline and at most five bullet points, and a closing slide with the recommendation. For every factual or numeric claim in the document, search the web for a supporting public source and add a reference to it in the speaker notes of the slide where the claim appears, with the source title and URL. If a claim cannot be supported by a source you actually retrieved, mark it in the speaker notes as unverified rather than attaching a source you did not read. Create the presentation in Google Slides. Do not invent URLs and do not claim the deck exists before the tool has confirmed it. Return the presentation link, a slide count, and a list of claims with their source status."
+  },
+  {
+    "id": "pdf-to-doc",
+    "title": "Convert PDFs into Google Docs",
+    "description": "Extract a PDF into a clean, structured Google Doc that preserves headings and tables.",
+    "apps": [
+      "googledrive",
+      "googledocs"
+    ],
+    "prompt": "I have PDFs in Google Drive that I need as editable Google Docs. For each PDF, extract the text and create a Google Doc that preserves the reading order and structure: keep headings as headings, keep lists as lists, and keep tables as tables rather than flattening them into paragraphs. Keep page-break artifacts, repeated running headers and footers, and page numbers out of the body text. Where the PDF has a scanned page or an image with no extractable text, insert a clearly marked placeholder saying which page it was instead of leaving a silent gap or guessing the content. Do not summarize or rewrite anything: this is a conversion, not an edit. Return the new document link, the page count processed, and a list of pages that could not be extracted."
+  },
+  {
+    "id": "invoice-exceptions",
+    "title": "Review invoices before payment",
+    "description": "Match invoices to purchase orders and receipts, and route only the exceptions for review.",
+    "apps": [],
+    "prompt": "I get a batch of supplier invoices and need the exceptions found before anything is paid. For each invoice, perform a three-way match against the purchase order and the goods-received note supplied in the same input. Check that the supplier, currency, line quantities, unit prices and tax treatment agree, and that the invoice total equals the sum of its lines plus tax. Flag every one of these separately: totals that do not add up, a price above the purchase-order price, a quantity above what was received, a duplicate invoice number from the same supplier, a duplicate of the same amount and date from one supplier, an invoice with no matching purchase order, and a currency that differs from the purchase order. Compute every number from the source rows rather than repeating a total printed on the invoice. Return JSON with fields checked, matched_clean, exceptions (each with invoice_id, exception_type, expected, found), and total_value_held.",
+    "sample": "invoice-drafts.xlsx"
+  },
+  {
+    "id": "bank-reconciliation",
+    "title": "Reconcile a bank export to the ledger",
+    "description": "Match bank lines to ledger entries, and explain every difference rather than forcing a balance.",
+    "apps": [],
+    "prompt": "Reconcile a bank statement export against the general ledger for the same period. Match transactions on amount, date within a three-day window, and counterparty. Classify every unmatched item as one of: timing difference such as a deposit in transit or an uncleared cheque, a bank fee or interest not yet booked, a duplicate posting, a transposition error where the digits agree but the order does not, or genuinely unexplained. Produce a reconciliation that starts at the bank closing balance, applies each adjustment, and arrives at the ledger balance. The adjustments must actually account for the whole difference. Never invent an adjusting entry to force the two sides to agree: if a residual remains, report it as unexplained with its exact amount. Return JSON with opening and closing balances, matched_count, adjustments (each with type, amount, reference), and unexplained_difference.",
+    "sample": "bank-reconciliation.xlsx"
+  },
+  {
+    "id": "expense-policy",
+    "title": "Audit expense claims against policy",
+    "description": "Check submitted expenses against the written policy and separate breaches from missing evidence.",
+    "apps": [],
+    "prompt": "Audit a batch of employee expense claims against the expense policy supplied in the same input. For each claim check the category limit, whether a receipt is attached, whether it needed pre-approval, whether it falls inside the policy date window, and whether it looks like a duplicate of another claim. Keep two outcomes strictly apart: a claim that breaches a policy rule, and a claim that cannot be assessed because evidence is missing. Do not treat a missing receipt as proof of a breach. Quote the exact policy clause you applied for every finding, and do not apply a rule that is not written in the supplied policy. Return JSON with fields claims_reviewed, compliant, breaches (each with claim_id, clause, reason, amount), needs_evidence, and total_flagged_value."
+  },
+  {
+    "id": "revenue-variance",
+    "title": "Explain the month's revenue variance",
+    "description": "Bridge actual revenue to budget and attribute the gap to volume, price and mix.",
+    "apps": [],
+    "prompt": "Explain why revenue came in above or below budget this month. Build a bridge from budgeted revenue to actual revenue and decompose the difference into volume, price, mix and new-versus-churned-customer effects. The components must sum to the total variance exactly. Rank the drivers by size, name the specific products or segments behind the three largest, and separate one-off items from anything that looks like a trend. Derive every figure from the supplied actuals and budget rows; do not carry forward a number that is only stated in a commentary field. Where the data cannot attribute part of the variance, report that portion as unattributed rather than distributing it. Return JSON with budget, actual, total_variance, components (each with name, amount, direction), top_drivers, and unattributed."
+  },
+  {
+    "id": "cash-forecast",
+    "title": "Build a 13-week cash forecast",
+    "description": "Project weekly cash from receivables, payables and committed costs, and show what breaks it.",
+    "apps": [],
+    "prompt": "Build a 13-week rolling cash forecast from an opening balance, an accounts-receivable ageing, an accounts-payable ageing, payroll and recurring committed costs. Apply historical collection behaviour to the receivables rather than assuming everything is paid on its due date. Show each week's opening balance, receipts, payments and closing balance, and mark any week where the closing balance falls below the minimum operating buffer stated in the input. Add a short sensitivity showing what happens if collections slip by two weeks and, separately, if the largest single customer does not pay at all. State the assumptions you used as an explicit list. Do not present the forecast as a prediction: label it as a projection from the stated assumptions. Return JSON with weeks (each with week, opening, receipts, payments, closing), breach_weeks, assumptions, and sensitivity.",
+    "sample": "cash-forecast.xlsx"
+  },
+  {
+    "id": "vendor-spend",
+    "title": "Find duplicate and drifting vendor spend",
+    "description": "Consolidate spend by vendor, catch near-duplicate suppliers, and surface price drift.",
+    "apps": [],
+    "prompt": "Analyse a year of vendor spend to find money being lost to fragmentation. Group spend by vendor after normalising names that refer to the same company, for example an abbreviation, a legal suffix, or a small spelling difference; list every merge you made so a human can check it. Identify vendors supplying the same category where consolidation would cross a volume-discount threshold stated in the input, unit prices that rose more than the stated tolerance between the first and last quarter, subscriptions that renewed without a usage record, and payments that fall just under an approval threshold. Never merge two vendors on name similarity alone when their tax identifiers differ. Return JSON with vendors_reviewed, merges (each with kept, merged, evidence), consolidation_opportunities, price_drift, and suspected_threshold_avoidance."
+  },
+  {
+    "id": "board-pack",
+    "title": "Draft the monthly board finance pack",
+    "description": "Turn the close numbers into a board-ready commentary that says what changed and what is uncertain.",
+    "apps": [],
+    "prompt": "Write the finance section of a monthly board pack from the closing numbers supplied. Cover revenue, gross margin, operating expenses, EBITDA, cash and runway, each with the actual, the budget, the prior month, and the variance. Write commentary that explains the cause of each material variance rather than restating the number, using the threshold for materiality given in the input. Include a short section naming the three risks most likely to change next month's numbers and what would have to be true for each to happen. Every figure must be traceable to a supplied row. Where a number depends on an estimate or an unclosed item, say so in the commentary instead of presenting it as final. Do not describe a result as strong, healthy or concerning without the number that justifies the word. Return JSON with metrics (each with name, actual, budget, prior, variance, commentary), risks, and open_items."
+  }
+]

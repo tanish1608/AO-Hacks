@@ -85,7 +85,13 @@ export interface Chat {
   messages: Message[];
   versions: WorkflowVersion[];
   memory: Memory[];
-  settings: { target: number; maxIterations: number; maxToolCalls: number };
+  settings: {
+    target: number;
+    maxIterations: number;
+    maxToolCalls: number;
+    /** Chosen from lib/workbench/models.ts. Unset means the deployment default. */
+    model?: string;
+  };
   selectedApps?: string[];
   sessionId: string | null;
   modelUsage: Usage;

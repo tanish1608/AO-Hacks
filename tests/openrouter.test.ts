@@ -173,3 +173,28 @@ void test('the request timeout is configurable and defaults above a minute', asy
   await openRouterModel(settings, fetcher).json('JSON', {}, schema);
   assert.ok(signalled, 'the request should carry an abort signal');
 });
+
+void test('a provider-side error on the choice is retried once', async () => {
+  // finish_reason 'error' is the upstream failing, not us. It killed a seeding
+  // run after 8 seconds while transport failures were already being retried.
+  let calls = 0;
+  const fetcher: typeof fetch = async () => {
+    if (++calls === 1) return Response.json(completion(0.001, 'error'));
+    return Response.json(completion(0.002));
+  };
+  const result = await openRouterModel(settings, fetcher).json('JSON', {}, schema);
+  assert.equal(calls, 2);
+  assert.deepEqual(result.value, { ok: true });
+});
+
+void test('a provider error on both attempts still fails the step', async () => {
+  let calls = 0;
+  await assert.rejects(
+    openRouterModel(settings, async () => {
+      calls++;
+      return Response.json(completion(0.001, 'error'));
+    }).json('JSON', {}, schema),
+    /incomplete \(error\)/,
+  );
+  assert.equal(calls, 2);
+});

@@ -105,6 +105,10 @@ export function openRouterModel(
         if (choice?.finish_reason === 'length' && attempt + 1 < maxAttempts) continue;
         if (choice?.finish_reason === 'length')
           throw fail('The model ran out of output budget before finishing, twice. Shorten what this step is asked to produce, or split it across two agents.');
+        // A provider-side error on the choice is transient in the same way a
+        // dropped connection is, and arrives fast. Retry once rather than
+        // losing the run to someone else's hiccup.
+        if (choice?.finish_reason === 'error' && attempt + 1 < maxAttempts) continue;
         if (choice?.finish_reason !== 'stop') throw fail(`Model output is incomplete (${choice?.finish_reason ?? 'no candidate'}).`);
         if (choice.message?.refusal) throw fail('Model declined this request.');
         const content = choice.message?.content;

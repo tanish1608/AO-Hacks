@@ -67,8 +67,13 @@ The OAuth client cannot be created from the CLI — the IAP OAuth Admin API was
 shut down in March 2026 and generic clients are Console-only:
 
 1. APIs & Services → Credentials → Create credentials → OAuth client ID → Web application.
-2. Authorized redirect URIs: `https://<service-url>/api/auth/google` and
-   `http://127.0.0.1:3000/api/auth/google` for local development.
+2. Authorized redirect URIs. The redirect URI is rebuilt from the host of the
+   incoming request, and Cloud Run answers on **two** hostnames — the
+   project-number form and the generated one — so register both or a visitor who
+   arrives on the other one gets `redirect_uri_mismatch`:
+   - `https://agent-foundry-826928184760.us-central1.run.app/api/auth/google`
+   - `https://agent-foundry-wylgntjyxa-uc.a.run.app/api/auth/google`
+   - `http://127.0.0.1:3000/api/auth/google` for local development.
 3. Store the secret, then point the service at it:
 
 ```sh
@@ -78,6 +83,17 @@ gcloud run services update agent-foundry --project=ao-hacks --region=us-central1
   --update-env-vars="GOOGLE_CLIENT_ID=<client-id>" \
   --update-secrets="GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest"
 ```
+
+### Why the image does not build under /app
+
+`WORKDIR` is `/srv/foundry`, not `/app`. The App Router's own directory is
+`app/`, so building under `/app` puts the routes at `/app/app/<route>/page.tsx`
+and the landing page at `/app/app/page.tsx`. The first deploy of the accounts
+branch served the workspace at `/` and the landing page nowhere, while the
+identical source built on macOS routed both correctly — the route graph is right
+on either platform, so the collapse happens later in the Linux build. Keeping the
+working directory away from `app` removes the ambiguity instead of relying on
+which normalization runs where. Do not move it back.
 
 ## Data durability, and its limit
 

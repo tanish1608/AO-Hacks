@@ -38,10 +38,11 @@ import {
   startArm,
 } from '@/lib/workbench/experiment';
 import { validateWorkflow, retrieveMemory } from '@/lib/workbench/validation';
-import { digest } from '@/lib/engine/runtime';
+import { digest } from '@/lib/workbench/digest';
 import type { Chat, Run } from '@/lib/workbench/types';
 import { listKnowledge } from '@/lib/server/tool-knowledge-store';
 import { cleanRules } from '@/lib/workbench/workspace';
+import { validateModel } from '@/lib/workbench/models';
 /** Starts the next pending arm on the frozen graph, input, and memory snapshot. */
 async function startExperimentArm(chat: Chat) {
   const experiment = chat.experiment!;
@@ -244,10 +245,17 @@ export async function POST(
           400,
           'Target must be 50–100%, attempts 1–8, and tool budget 1–60.',
         );
+      let model;
+      try {
+        model = validateModel(b.model);
+      } catch (e) {
+        throw new HttpError(400, (e as Error).message);
+      }
       chat.settings = {
         target: b.target,
         maxIterations: b.maxIterations,
         maxToolCalls: b.maxToolCalls,
+        ...(model ? { model } : {}),
       };
     } else if (p.action === 'memory') {
       const m = chat.memory.find((m) => m.id === b.memoryId);
@@ -470,7 +478,14 @@ export async function POST(
     chat.versions = chat.versions.slice(-30);
     chat.messages = retainMessages(chat.messages);
     await saveChat(chat, owner, token, run);
-    return json(await snapshot(chat, owner));
+    // Reuse the runs already read for this request, with the one just saved
+    // folded in, instead of parsing every trace history a second time.
+    const current = run
+      ? [run, ...runs.filter((r) => r.id !== run!.id)].sort((a, b) =>
+          b.createdAt.localeCompare(a.createdAt),
+        )
+      : runs;
+    return json(await snapshot(chat, owner, current));
   } catch (e) {
     if (token && owner && id)
       await releaseChat(id, owner, token).catch(() => {});

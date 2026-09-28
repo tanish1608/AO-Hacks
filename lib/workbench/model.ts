@@ -1,37 +1,48 @@
-import type { Model, ModelResult } from './types.ts';
+import type { Model, ModelResult, Usage } from './types.ts';
 import { addUsage, emptyUsage } from './types.ts';
-import type { Usage } from '../engine/types.ts';
 import { Validator } from '@cfworker/json-schema';
+import { DEFAULT_MODEL, resolveModel } from './models.ts';
 
 export type ModelEnvironment = Record<string, string | undefined>;
-export function modelSettings(env: ModelEnvironment) {
+export function modelSettings(env: ModelEnvironment, chosen?: string) {
   const provider = env.FOUNDRY_PROVIDER || (env.OPENROUTER_API_KEY ? 'openrouter' : 'gemini');
   if (provider !== 'openrouter' && provider !== 'gemini')
     throw new Error('FOUNDRY_PROVIDER must be openrouter or gemini');
+  const fallback = env.FOUNDRY_MODEL || (provider === 'openrouter' ? DEFAULT_MODEL : 'gemini-3.8-flash');
   return {
     provider,
     key: (provider === 'openrouter' ? env.OPENROUTER_API_KEY : env.GEMINI_API_KEY) || '',
-    model: env.FOUNDRY_MODEL || (provider === 'openrouter' ? 'openai/gpt-4o' : 'gemini-3.8-flash'),
+    // A workflow's choice only applies to OpenRouter; the legacy Gemini path
+    // addresses its models by a different name entirely.
+    model: provider === 'openrouter' ? resolveModel(chosen, fallback) : fallback,
     inputPrice: env.FOUNDRY_INPUT_PRICE_PER_MILLION,
     outputPrice: env.FOUNDRY_OUTPUT_PRICE_PER_MILLION,
     siteUrl: env.OPENROUTER_SITE_URL,
     appName: env.OPENROUTER_APP_NAME || 'Agent Foundry',
   };
 }
-export function workbenchModel(env: ModelEnvironment, fetcher: typeof fetch = fetch): Model {
-  const settings = modelSettings(env);
+export function workbenchModel(
+  env: ModelEnvironment,
+  fetcher: typeof fetch = fetch,
+  chosen?: string,
+): Model {
+  const settings = modelSettings(env, chosen);
   return settings.provider === 'openrouter'
     ? openRouterModel(settings, fetcher)
     : geminiModel(settings, fetcher);
 }
 
 export function openRouterModel(
-  settings: GeminiSettings & { siteUrl?: string; appName?: string; maxOutputTokens?: number; maxAttempts?: number },
+  settings: GeminiSettings & { siteUrl?: string; appName?: string; maxOutputTokens?: number; maxAttempts?: number; timeoutMs?: number },
   fetcher: typeof fetch = fetch,
 ): Model {
   if (!settings.key) throw new Error('OpenRouter credentials are not configured');
   if (!/^[a-zA-Z0-9._:-]+\/[a-zA-Z0-9._:/-]+$/.test(settings.model) || settings.model.length > 200)
     throw new Error('Invalid OpenRouter model identifier');
+  // A reasoning model spends tokens before it emits anything, so a long
+  // structured generation can legitimately run past a minute. The old 55s
+  // ceiling cut those off and the run reported it as a billing problem.
+  const timeout = settings.timeoutMs ?? 120_000;
   return {
     async json<T>(system: string, input: unknown, schema: Record<string, unknown>): Promise<ModelResult<T>> {
       const started = performance.now(), prompt = JSON.stringify(input), usage = emptyUsage();
@@ -47,9 +58,13 @@ export function openRouterModel(
               'X-OpenRouter-Title': settings.appName || 'Agent Foundry',
               ...(settings.siteUrl ? { 'HTTP-Referer': settings.siteUrl } : {}),
             },
-            signal: AbortSignal.timeout(55000),
+            signal: AbortSignal.timeout(timeout),
             body: JSON.stringify({ model: settings.model, stream: false,
-              max_tokens: settings.maxOutputTokens ?? (attempt ? 14000 : 7000),
+              // Reasoning tokens are charged against this budget before any
+              // content is emitted, so a ceiling sized for the answer alone
+              // truncates the answer. A reconciliation node exhausted both
+              // 7000 and 14000 and failed the run outright.
+              max_tokens: settings.maxOutputTokens ?? (attempt ? 32000 : 12000),
               provider: { require_parameters: true },
               messages: [
                 { role: 'system', content: system + (attempt ? ' Keep the structured response compact; the previous generation exceeded its token budget.' : '') },
@@ -60,7 +75,11 @@ export function openRouterModel(
           });
         } catch (error) {
           usage.costUsd = null;
-          throw fail(`OpenRouter request failed: ${error instanceof Error ? error.message : 'transport error'}`);
+          const detail = error instanceof Error ? `${error.name}: ${error.message}` : 'transport error';
+          // Generation is read-only, so retrying is safe. Losing an entire run
+          // to one timed-out request is the worse outcome.
+          if (attempt + 1 < maxAttempts) continue;
+          throw fail(`OpenRouter request failed (${detail}). The model did not respond in time.`);
         }
         const result = await response.json().catch(() => null) as {
           error?: { message?: string };
@@ -77,11 +96,19 @@ export function openRouterModel(
         } else usage.costUsd = null;
         if (!response.ok || result?.error)
           throw fail(`OpenRouter HTTP ${response.status}: ${(result?.error?.message || 'Request failed').replaceAll(settings.key, '[redacted]').slice(0, 500)}`);
+        if (!result)
+          throw fail('The model response could not be read. It may have been cut off in transit.');
         if (!u || !Number.isFinite(u.prompt_tokens) || !Number.isFinite(u.completion_tokens) ||
             u.prompt_tokens! < 0 || u.completion_tokens! < 0)
           throw fail('Model usage metadata missing; billing for this call is unknown');
         const choice = result?.choices?.[0];
         if (choice?.finish_reason === 'length' && attempt + 1 < maxAttempts) continue;
+        if (choice?.finish_reason === 'length')
+          throw fail('The model ran out of output budget before finishing, twice. Shorten what this step is asked to produce, or split it across two agents.');
+        // A provider-side error on the choice is transient in the same way a
+        // dropped connection is, and arrives fast. Retry once rather than
+        // losing the run to someone else's hiccup.
+        if (choice?.finish_reason === 'error' && attempt + 1 < maxAttempts) continue;
         if (choice?.finish_reason !== 'stop') throw fail(`Model output is incomplete (${choice?.finish_reason ?? 'no candidate'}).`);
         if (choice.message?.refusal) throw fail('Model declined this request.');
         const content = choice.message?.content;

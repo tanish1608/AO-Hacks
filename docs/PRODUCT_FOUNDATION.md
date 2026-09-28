@@ -1,6 +1,7 @@
 # Product foundation
 
-Branch: `codex/startup-foundation`. This is a local product iteration, not a new hosted launch.
+Branch: `product/auth-and-landing`. Deployed to Cloud Run with application-level
+accounts; still a single-tenant-per-account product, not a team offering.
 
 ## Implemented
 
@@ -14,8 +15,12 @@ Branch: `codex/startup-foundation`. This is a local product iteration, not a new
 | Setup | Server-side live connection check before sample generation or agent execution; no cached authorization |
 | Recovery | Missing-input, connection, and budget blocks stop before extra evaluator/reflection calls |
 | Terminology | Workflow, steps, runs, rules, and insights replace lab-facing navigation |
-| Research | Historical report and experiments preserved under docs; `/lab` redirects to the product, CLI benchmark remains |
-| Authentication | Shared open identity disabled; standalone Node defaults to loopback and refuses public Sites-header trust |
+| Research | Historical report and experiments preserved under docs; the synthetic optimizer, its routes and `lib/engine/` were removed |
+| Accounts | Email and password sign-up, PBKDF2 hashes, digest-only session tokens, per-address sign-in throttling, one message for unknown address and wrong password |
+| Surfaces | Public landing at `/`, workspace at `/app`, `/login` and `/signup`; published workflow links require an account |
+| Model choice | Per-workflow, from an allowlist checked for structured-output support; default `google/gemini-3.8-flash` |
+| Storage | Cloud SQL PostgreSQL in deployment through a D1-compatible adapter; SQLite locally. Instance count is no longer capped at one |
+| Workflow library | Ten finance and document workflows, each designed by the model from its own prompt and installed under a stable id |
 | Repository | Runtime SQLite and build metadata removed from tracking without deleting local files |
 
 No data migration or schema replacement was needed. Existing tasks, versions, and evidence remain readable. No external business actions were executed during this product iteration.
@@ -38,8 +43,8 @@ The existing six-word overlap filter now includes business rules, but it is a he
 ## Before a public customer launch
 
 1. **Durable execution.** Move advancement from the open browser into authenticated background workers with job leases, retries, cancellation, and recovery after worker death. An active run currently needs its workflow open.
-2. **Production identity.** Select the intended hosting and identity service, implement tenant membership and roles, and test unauthorized access across every data and connector boundary. Local Sites identity and the IAP adapter are not a complete team account system.
-3. **Shared persistence.** Use transactional shared storage appropriate to the hosting target. The old single-instance SQLite snapshot adapter is not a horizontally scalable design.
+2. **Team identity.** Email and password accounts now exist, but there is no team membership, no roles, no email verification, and no password reset. A forgotten password currently has no self-service path. Test unauthorized access across every data and connector boundary before inviting anyone outside a single owner.
+3. **Shared persistence.** Done for the database: deployment runs on Cloud SQL PostgreSQL through a D1-compatible adapter, so instances no longer hold competing copies of a file. What remains is everything above the database — run advancement is still driven by the open browser, so more instances does not yet mean more throughput on a single workflow.
 4. **Verified outcomes.** Extend delivery checks beyond Zoho and check expected write counts and all relevant fields, not only existence of a successful tool receipt.
 5. **Financial determinism.** Use exact decimal arithmetic and source-row reconciliation for invoices. Model reasoning must not be the final monetary authority.
 6. **Improvement releases.** Convert reviewer corrections into proposed scoped rules, independently authored regression cases, held-out comparisons, and reversible workflow releases. Saved regression cases, candidate testing, explicit apply, and rollback are now implemented; see WORKFLOW_RELEASES.md. Independently authored held-out comparisons and automatic correction extraction remain outstanding.
@@ -53,4 +58,6 @@ The next iteration adds reviewed external actions, saved regression cases, isola
 
 ## Conversation-first correction
 
-The home screen is the chat composer. Recent workflows reopen their conversations from the sidebar; the separate library and review queue are no longer navigation surfaces. Host lives in the conversation header and opens a copyable-link dropdown. The shared page puts app connections and run inputs on the left and the agent architecture on the right. Visitor isolation remains enforced, but starting it is automatic when Run workflow is pressed. Links are local previews until a public deployment is configured.
+The workspace home is the chat composer. Recent workflows reopen their conversations from the sidebar; the separate library and review queue are no longer navigation surfaces. Host lives in the conversation header and opens a copyable-link dropdown. The shared page puts app connections and run inputs on the left and the agent architecture on the right. Visitor isolation remains enforced, but starting it is automatic when Run workflow is pressed.
+
+Shared links work now. Under Identity-Aware Proxy they did not: IAP authenticated the whole origin, so a recipient was refused before the application ever saw the request, and both published links sat at zero uses. Moving authentication into the application made the link account-only instead of origin-only.

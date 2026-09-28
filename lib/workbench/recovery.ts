@@ -1,5 +1,5 @@
 import { advanceChatRun } from './engine.ts';
-import { digest } from '../engine/runtime.ts';
+import { digest } from './digest.ts';
 import {
   emptyUsage,
   type Chat,

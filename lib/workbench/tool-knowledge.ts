@@ -1,4 +1,4 @@
-import { digest } from '../engine/runtime.ts';
+import { digest } from './digest.ts';
 import type {
   Attempt,
   DiscoveredTool,
@@ -200,6 +200,9 @@ export function extractToolKnowledge(
       if (!tool) continue;
       const argKeys = argumentKeys(t.input);
       const { signature: errorSignature, outcome } = classifyToolError(t.error);
+      // "succeeded with no arguments" states nothing a later run can act on,
+      // and once corroborated it would take up space in a prompt.
+      if (!t.error && !argKeys.length) continue;
       drafts.push({
         toolkit: tool.toolkit,
         slug: tool.slug,

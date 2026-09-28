@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ModelCallError, modelSettings, openRouterModel, workbenchModel } from '../lib/workbench/model.ts';
+import { DEFAULT_MODEL } from '../lib/workbench/models.ts';
 
 const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: false };
 const settings = { key: 'test-private-key', model: 'openai/gpt-4o', siteUrl: 'http://127.0.0.1:3000' };
@@ -29,11 +30,28 @@ void test('OpenRouter uses server credentials, strict schema, and provider-repor
   assert.equal(result.usage.inputTokens, 10);
 });
 
+void test('a workflow chooses its model, and only from the allowlist', () => {
+  const env = { OPENROUTER_API_KEY: 'key' };
+  assert.equal(modelSettings(env, 'openai/gpt-6-luna').model, 'openai/gpt-6-luna');
+  // An unknown id must not reach the provider: it would fail every structured
+  // call. Fall back to the deployment default instead.
+  assert.equal(modelSettings(env, 'openai/not-a-model').model, DEFAULT_MODEL);
+  assert.equal(modelSettings(env, undefined).model, DEFAULT_MODEL);
+  // An explicit FOUNDRY_MODEL still wins when a workflow expressed no choice.
+  assert.equal(modelSettings({ ...env, FOUNDRY_MODEL: 'openai/pinned' }).model, 'openai/pinned');
+  // Gemini addresses its models by another name, so a workflow choice made for
+  // OpenRouter must not be handed to it.
+  assert.equal(
+    modelSettings({ GEMINI_API_KEY: 'k', FOUNDRY_PROVIDER: 'gemini' }, 'openai/gpt-6-luna').model,
+    'gemini-3.8-flash',
+  );
+});
+
 void test('selected provider cannot silently fall back to Gemini', () => {
   const env = { FOUNDRY_PROVIDER: 'openrouter', GEMINI_API_KEY: 'old' };
   assert.equal(modelSettings(env).key, '');
   assert.throws(() => workbenchModel(env), /OpenRouter credentials/);
-  assert.equal(modelSettings({ OPENROUTER_API_KEY: 'key' }).model, 'openai/gpt-4o');
+  assert.equal(modelSettings({ OPENROUTER_API_KEY: 'key' }).model, DEFAULT_MODEL);
   assert.throws(() => modelSettings({ FOUNDRY_PROVIDER: 'typo' }), /must be/);
 });
 
@@ -85,6 +103,98 @@ void test('credential errors redact the key and do not retry', async () => {
 void test('missing token usage and exhausted truncation cannot pass', async () => {
   await assert.rejects(openRouterModel(settings, async () => Response.json({ choices: [] })).json('JSON', {}, schema), /usage metadata/);
   let calls = 0;
-  await assert.rejects(openRouterModel(settings, async () => { calls++; return Response.json(completion(0.002, 'length')); }).json('JSON', {}, schema), /incomplete/);
+  // Truncated twice: say what to do about it, since the fix is to ask this step
+  // for less rather than to retry again.
+  await assert.rejects(
+    openRouterModel(settings, async () => {
+      calls++;
+      return Response.json(completion(0.002, 'length'));
+    }).json('JSON', {}, schema),
+    /ran out of output budget/,
+  );
+  assert.equal(calls, 2);
+});
+
+void test('a timed-out request is retried once, then reported as a transport failure', async () => {
+  // This is what lost a whole seeding run: one slow generation threw, and the
+  // message blamed billing metadata instead of the response never arriving.
+  let calls = 0;
+  const fetcher: typeof fetch = async () => {
+    calls++;
+    throw Object.assign(new Error('The operation was aborted due to timeout'), {
+      name: 'TimeoutError',
+    });
+  };
+  await assert.rejects(
+    openRouterModel(settings, fetcher).json('JSON', {}, schema),
+    (e: ModelCallError) => {
+      assert.match(e.message, /did not respond in time/);
+      assert.match(e.message, /TimeoutError/);
+      assert.equal(e.usage.costUsd, null);
+      return true;
+    },
+  );
+  assert.equal(calls, 2, 'a transport failure should be retried once');
+});
+
+void test('a transport failure that recovers on the retry returns the value', async () => {
+  let calls = 0;
+  const fetcher: typeof fetch = async () => {
+    if (++calls === 1) throw new Error('socket hang up');
+    return Response.json(completion(0.003));
+  };
+  const result = await openRouterModel(settings, fetcher).json('JSON', {}, schema);
+  assert.equal(calls, 2);
+  assert.deepEqual(result.value, { ok: true });
+  // The abandoned attempt may still have been billed and its cost is unknown,
+  // so the total stays unknown rather than claiming only the second call's
+  // price. Unknown is never reported as a number.
+  assert.equal(result.usage.costUsd, null);
+  assert.equal(result.usage.inputTokens, 10);
+});
+
+void test('an unreadable body is not reported as a billing problem', async () => {
+  const fetcher: typeof fetch = async () => new Response('<html>gateway</html>', { status: 200 });
+  await assert.rejects(
+    openRouterModel({ ...settings, maxAttempts: 1 }, fetcher).json('JSON', {}, schema),
+    (e: ModelCallError) => {
+      assert.match(e.message, /could not be read/);
+      return true;
+    },
+  );
+});
+
+void test('the request timeout is configurable and defaults above a minute', async () => {
+  let signalled: AbortSignal | undefined;
+  const fetcher: typeof fetch = async (_url, init) => {
+    signalled = init?.signal ?? undefined;
+    return Response.json(completion());
+  };
+  await openRouterModel(settings, fetcher).json('JSON', {}, schema);
+  assert.ok(signalled, 'the request should carry an abort signal');
+});
+
+void test('a provider-side error on the choice is retried once', async () => {
+  // finish_reason 'error' is the upstream failing, not us. It killed a seeding
+  // run after 8 seconds while transport failures were already being retried.
+  let calls = 0;
+  const fetcher: typeof fetch = async () => {
+    if (++calls === 1) return Response.json(completion(0.001, 'error'));
+    return Response.json(completion(0.002));
+  };
+  const result = await openRouterModel(settings, fetcher).json('JSON', {}, schema);
+  assert.equal(calls, 2);
+  assert.deepEqual(result.value, { ok: true });
+});
+
+void test('a provider error on both attempts still fails the step', async () => {
+  let calls = 0;
+  await assert.rejects(
+    openRouterModel(settings, async () => {
+      calls++;
+      return Response.json(completion(0.001, 'error'));
+    }).json('JSON', {}, schema),
+    /incomplete \(error\)/,
+  );
   assert.equal(calls, 2);
 });

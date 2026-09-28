@@ -1,0 +1,33 @@
+[
+  {
+    "id": "campaign-replies",
+    "title": "Track campaign replies in a sheet",
+    "description": "Read Gmail for replies to an outreach campaign and mark each one in the tracking spreadsheet.",
+    "apps": [
+      "gmail",
+      "googlesheets"
+    ],
+    "prompt": "Every weekday I need to know who replied to my outreach campaign and have the tracker updated. Read my Gmail for replies to messages in the campaign, match each reply back to the prospect row in the Google Sheet tracker by email address, and update that row: set Replied to yes, write the reply date, and paste a one-sentence summary of what they said plus a classification of interested, not interested, referred elsewhere, or asked a question. Leave rows with no reply untouched. Never send, archive or delete any email, and never invent a reply that is not in the mailbox. If a reply comes from an address that is not in the tracker, list it separately as an unmatched reply rather than guessing which row it belongs to. Return a JSON object with fields replies_found, rows_updated, unmatched, and a short summary."
+  },
+  {
+    "id": "docx-to-deck",
+    "title": "Turn a document into a sourced deck",
+    "description": "Convert a DOCX into a Google Slides presentation, with every claim backed by a searched reference.",
+    "apps": [
+      "googledrive",
+      "googleslides",
+      "composio_search"
+    ],
+    "prompt": "I upload a Word document and want a presentation built from it. Read the DOCX from Google Drive, work out the argument it is making, and design a deck of 8 to 14 slides with a clear narrative: a title slide, an agenda, one idea per content slide with a short headline and at most five bullet points, and a closing slide with the recommendation. For every factual or numeric claim in the document, search the web for a supporting public source and add a reference to it in the speaker notes of the slide where the claim appears, with the source title and URL. If a claim cannot be supported by a source you actually retrieved, mark it in the speaker notes as unverified rather than attaching a source you did not read. Create the presentation in Google Slides. Do not invent URLs and do not claim the deck exists before the tool has confirmed it. Return the presentation link, a slide count, and a list of claims with their source status."
+  },
+  {
+    "id": "pdf-to-doc",
+    "title": "Convert PDFs into Google Docs",
+    "description": "Extract a PDF into a clean, structured Google Doc that preserves headings and tables.",
+    "apps": [
+      "googledrive",
+      "googledocs"
+    ],
+    "prompt": "I have PDFs in Google Drive that I need as editable Google Docs. For each PDF, extract the text and create a Google Doc that preserves the reading order and structure: keep headings as headings, keep lists as lists, and keep tables as tables rather than flattening them into paragraphs. Keep page-break artifacts, repeated running headers and footers, and page numbers out of the body text. Where the PDF has a scanned page or an image with no extractable text, insert a clearly marked placeholder saying which page it was instead of leaving a silent gap or guessing the content. Do not summarize or rewrite anything: this is a conversion, not an edit. Return the new document link, the page count processed, and a list of pages that could not be extracted."
+  }
+]

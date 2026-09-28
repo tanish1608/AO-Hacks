@@ -1,4 +1,4 @@
-import { digest } from '../engine/runtime';
+import { digest } from '../workbench/digest';
 import type { ComposioGateway } from '../workbench/composio';
 import { applyLiveness, cacheKeyInput, stripLiveness } from '../workbench/tool-cache';
 import type { DiscoveredTool } from '../workbench/types';

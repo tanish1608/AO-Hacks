@@ -1298,3 +1298,59 @@ void test('an ablation arm reads frozen memory and never writes back', async () 
   assert.equal(control.attempts[0].memoryIds.length, 0);
   assert.equal(control.attempts[0].graphDigest, armRun.attempts[0].graphDigest);
 });
+
+void test('a snake_case literal satisfies its own contains check', async () => {
+  // Markdown stripping removes underscores, which silently made every
+  // contains assertion over JSON keys unsatisfiable: the output was correct
+  // and the run was failed anyway. Two seeded finance workflows exhausted
+  // their attempts on exactly this.
+  const attempt = {
+    id: 'a1',
+    iteration: 1,
+    workflow: {
+      title: 'Reconcile',
+      explanation: 'e',
+      nodes: [{ id: 'deliver', name: 'Deliver', role: 'r', instruction: 'i', toolkits: [], dependsOn: [] }],
+      criteria: [],
+    },
+    graphDigest: 'd',
+    states: [{ nodeId: 'deliver', status: 'done', output: '{"opening_balances":{"bank":1},"unexplained_difference":0}', turns: 1, observations: ['t1'], tools: [], error: null }],
+    traces: [{ id: 't1', nodeId: 'deliver', kind: 'model', name: 'Deliver', input: '', output: '', durationMs: 1, error: null, usage: emptyUsage(), at: 'now', langsmith: 'disabled' }],
+    evaluation: null,
+    memoryIds: [],
+    startedAt: 'now',
+    finishedAt: null,
+  } as unknown as Parameters<typeof normalizeEvaluation>[2];
+  const rubric = [
+    {
+      id: 'schema',
+      name: 'JSON fields',
+      description: 'Required keys are present',
+      weight: 1,
+      required: true,
+      assertion: {
+        kind: 'contains' as const,
+        min: 0,
+        max: 0,
+        terms: ['"opening_balances"', '"unexplained_difference"'],
+      },
+    },
+  ];
+  const evaluation = normalizeEvaluation(
+    { score: 0, verdict: 'revise', checks: [], summary: 's', issues: [], memoryVerdicts: [] } as never,
+    rubric,
+    attempt,
+    0.85,
+  );
+  const check = evaluation.checks.find((c) => c.criterionId === 'schema')!;
+  assert.equal(check.score, 1, check.rationale);
+
+  // An excludes assertion must still catch the term it is meant to catch.
+  const forbidden = normalizeEvaluation(
+    { score: 0, verdict: 'revise', checks: [], summary: 's', issues: [], memoryVerdicts: [] } as never,
+    [{ ...rubric[0], id: 'no', assertion: { kind: 'excludes' as const, min: 0, max: 0, terms: ['"opening_balances"'] } }],
+    attempt,
+    0.85,
+  );
+  assert.equal(forbidden.checks.find((c) => c.criterionId === 'no')!.score, 0);
+});

@@ -1,7 +1,7 @@
 import { validateWorkflow } from './validation.ts';
 import { cleanRules } from './workspace.ts';
 import { createChat } from './engine.ts';
-import { digest } from '../engine/runtime.ts';
+import { digest } from './digest.ts';
 import type { Chat, Workflow } from './types.ts';
 export interface PublishedWorkflow {
   title: string;

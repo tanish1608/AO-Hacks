@@ -10,13 +10,19 @@ multi-agent DAG to do it, runs it against real third-party apps through Composio
 the output against a frozen rubric, reflects on the failure evidence, writes scoped memory,
 repairs the graph, and retries — bounded by an iteration/token/tool budget.
 
-The primary surface at `/` is chat, with recent workflows in the sidebar, workflow rules,
-and a React Flow canvas (`components/chat-workspace.tsx`). `/lab` redirects to `/`;
-the historical deterministic experiment engine remains available to the benchmark script.
-Work is local-only until a new deployment is explicitly requested. See
-`docs/PRODUCT_FOUNDATION.md` for implemented behavior and outstanding public-launch gates.
+`/` is a public landing page. The product surface is `/app`: chat, recent workflows in
+the sidebar, workflow rules, and a React Flow canvas (`components/chat-workspace.tsx`).
+`/login` and `/signup` create the session; `/w/[id]` opens a published workflow and
+requires an account. See `docs/PRODUCT_FOUNDATION.md` for implemented behavior and
+outstanding public-launch gates.
 
-Current default is **OpenRouter / openai/gpt-4o** (`FOUNDRY_PROVIDER=openrouter`, `FOUNDRY_MODEL`). Historical evidence uses Gemini; do not relabel it. The old Cloud Run service was retired on September 26, 2026. All third-party tool access is
+The synthetic `/lab` optimizer, its API routes, and `lib/engine/` were removed on
+September 28, 2026; their results are preserved in `docs/*_EVIDENCE.json` and the
+technical report. `digest()` moved to `lib/workbench/digest.ts`.
+
+Current default is **OpenRouter / openai/gpt-4o** (`FOUNDRY_PROVIDER=openrouter`, `FOUNDRY_MODEL`). Historical evidence uses Gemini; do not relabel it. Deployed on Cloud Run
+in project `ao-hacks` with application-level auth and no proxy in front of it
+(`docs/DEPLOY_GCP.md`). All third-party tool access is
 routed through **Composio v3 tool_router**. Orchestration steps run through **LangGraph**;
 observability optionally forwards to **LangSmith**.
 
@@ -26,9 +32,17 @@ observability optionally forwards to **LangSmith**.
   **Cloudflare Worker** (`wrangler`, Miniflare locally).
 - **D1** (SQLite) via raw `D1Database.prepare` in `lib/server/*`; Drizzle is used only to
   declare the schema (`db/schema.ts`) and generate migrations into `drizzle/`.
+- Production runs that same SQL against **Cloud SQL Postgres** through
+  `server/d1-postgres.mjs`, which implements the D1 surface. **Keep every query
+  dialect-neutral**: no `json_extract`, no `json_object`, no SQLite-only syntax. Fields the
+  sidebar needs are real columns (`chats.steps`, `agent_runs.mode/error/pending_status`)
+  maintained on write, not extracted from the payload in SQL.
 - Tailwind v4, shadcn primitives in `components/ui/**` (generated — do not hand-edit;
   they are lint-excluded), `@xyflow/react` for the canvas.
-- Auth is header-based ChatGPT/Sites SSO (`app/chatgpt-auth.ts`); every row is owner-scoped.
+- Auth is an application session cookie (`lib/server/auth.ts`, `app/auth.ts`); every row is
+  owner-scoped by `users.id`. No request header ever establishes identity. Email/password
+  always works; Google sign-in appears only when `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+  are set.
 
 ## Commands
 
@@ -40,7 +54,6 @@ npm test                                # node --test on tests/*.test.ts
 npm run build                           # then: npm start (wrangler dev on dist/)
 npm run db:generate                     # drizzle-kit generate after editing db/schema.ts
 npm exec wrangler -- d1 migrations apply DB --local --config wrangler.local.json
-npm run benchmark                       # synthetic /lab harness
 npm run agent:run -- "task"             # tool-free workflow from the terminal
 python3 scripts/smoke-workbench.py      # live Gemini, no external writes
 node --experimental-strip-types scripts/check-composio.ts
@@ -141,6 +154,26 @@ These are the substance of the track submission. Preserve them in any refactor.
     `insufficient_data` below 3 runs per arm regardless of how the medians fall, and the UI
     styles `memory_hurt` exactly like `memory_helped`. The verdict is computed in the pure
     function so the view cannot spin it. Medians, not means — arm samples are tiny.
+16. **Identity is the session cookie and nothing else.** `authorize()` and `requireUser()`
+    resolve the caller through `sessionUser()`; no request header, query parameter, or body
+    field may name an owner. Passwords are PBKDF2 with a per-account salt, session tokens are
+    stored only as a SHA-256 digest, and sign-in answers "wrong email" and "wrong password"
+    with one message so the response cannot enumerate accounts. Every owner-scoped query keeps
+    its `owner_id` predicate: the cookie says who you are, the `WHERE` clause is what confines
+    you. `safeNextPath()` gates every post-sign-in redirect, or the login page becomes an
+    open redirect that carries our name.
+17. **Google sign-in links accounts by address only when Google verified it.**
+    `verifyIdTokenClaims` requires `email_verified === true`, `aud === clientId`, the issuer,
+    the nonce from the state cookie, and the timestamps. Drop any one of those and someone can
+    take over an account they do not own — the audience check is what stops a token minted for
+    a different application being replayed here. A Google-only account stores the literal
+    `'none'` as its password hash; `verifyPassword` rejects every scheme that is not `pbkdf2`,
+    so no password can open it.
+18. **The API sends full step logs only for recent and active runs.** `trimRunDetail` keeps
+    traces for the newest `DETAILED_RUNS` plus anything running, paused, or awaiting approval,
+    and marks the rest `tracesOmitted`. Trim *after* computing metrics — `runMetrics` reads
+    tool traces to decide whether a delivery actually happened. A view that has no traces says
+    so rather than rendering an empty log, which would read as "this step recorded nothing".
 
 ### Honesty constraints in prose
 
@@ -153,6 +186,19 @@ results are retained on purpose. Do not upgrade these claims without new evidenc
 
 ```
 app/api/chats/[id]/[action]/route.ts   all chat mutations (message|run|advance|approve|…)
+app/api/auth/[action]/route.ts         POST signup|login|logout; GET session|google
+app/auth.ts                            currentUser / requireUser from the session cookie
+lib/server/auth.ts                     users, sessions, sign-in throttling (D1)
+lib/server/google.ts                   code exchange + account linking (D1)
+lib/workbench/google-auth.ts           authorize URL, ID-token claim checks, state (pure)
+lib/workbench/password.ts              PBKDF2 hashing + digest (pure, so it is tested)
+lib/workbench/credentials.ts           email/name/password rules, safeNextPath (pure)
+lib/workbench/run-detail.ts            which runs ship their step log (pure)
+lib/workbench/models.ts                the model allowlist + DEFAULT_MODEL (pure)
+lib/workbench/finance-workflows.json   the seeded workflow library
+scripts/finance-workflows.ts           designs (and optionally tests) that library
+lib/workbench/digest.ts                canonical() + digest() used for every content hash
+components/{landing,auth-form}.tsx     public landing page and the sign-in/up form
 lib/workbench/engine.ts                the loop
 lib/workbench/validation.ts            DAG validation, evaluation normalization, memory curation
 lib/workbench/composio.ts              Composio v3 tool_router gateway
@@ -167,7 +213,6 @@ lib/server/workbench-store.ts          D1 persistence, leases, snapshots
 lib/server/workbench-provider.ts       Dependencies wiring: model + tools + knowledge + trace
 lib/server/tool-knowledge-store.ts     D1 knowledge store; readOnlyKnowledge for arms
 lib/server/tool-cache.ts               D1 schema cache + liveToolkits probe
-lib/engine/*                           legacy /lab synthetic harness
 components/chat-workspace.tsx          the whole product UI (large; edit surgically)
 components/learning-charts.tsx         hand-rolled SVG trend + paired bars
 components/{workflow-canvas,run-conversation,test-results,app-picker}.tsx

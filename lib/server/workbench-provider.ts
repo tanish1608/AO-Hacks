@@ -3,7 +3,7 @@ import { Client } from 'langsmith';
 import { modelSettings, workbenchModel } from '../workbench/model';
 import { ComposioGateway } from '../workbench/composio';
 import type { Chat, Dependencies, Run } from '../workbench/types';
-import { digest } from '../engine/runtime';
+import { digest } from '../workbench/digest';
 import { database } from './store';
 import { HttpError } from './security';
 import { knowledgeStore } from './tool-knowledge-store';
@@ -18,9 +18,9 @@ import {
   writeSchemaCache,
 } from './tool-cache';
 const config = () => env as unknown as Record<string, string | undefined>;
-export function workbenchStatus() {
+export function workbenchStatus(chosen?: string) {
   const e = config();
-  const settings = modelSettings(e);
+  const settings = modelSettings(e, chosen);
   return {
     model: settings.model,
     provider: settings.provider,
@@ -177,7 +177,7 @@ export async function dependencies(
     knowledge: run?.validationId ? null : run?.experimentId
       ? frozenKnowledge(chat.experiment?.id === run.experimentId ? chat.experiment : undefined)
       : knowledgeStore(owner),
-    model: workbenchModel(e),
+    model: workbenchModel(e, fetch, chat.settings.model),
     tools,
     trace: async (t, runId) => {
       if (!client) return 'disabled';
@@ -220,7 +220,7 @@ export async function dependencies(
           extra: {
             metadata: {
               foundry_run_id: runId,
-              ls_provider: 'google_genai',
+              ls_provider: modelSettings(e, chat.settings.model).provider,
               ls_model_name: t.usage.model,
               node_id: t.nodeId,
               kind: t.kind,

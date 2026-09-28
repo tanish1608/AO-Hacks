@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { register } from 'node:module';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -7,30 +7,50 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createAssets } from './assets.mjs';
 import { SqliteD1 } from './d1-sqlite.mjs';
+import { PostgresD1 } from './d1-postgres.mjs';
 import { assignEnv, env } from './workers-shim.mjs';
 import { migrate } from './migrate.mjs';
 import { restore, scheduleSnapshot, shutdown, setSnapshotDatabase } from './persistence.mjs';
 import { runtimePolicy } from './runtime-policy.mjs';
+import { toNodeHeaders } from './http.mjs';
 const runtime = runtimePolicy(process.env);
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 const DIST = process.env.DIST_DIR ?? join(root, 'dist');
 const DATA = process.env.DATA_DIR ?? join(root, '.data');
 const PORT = Number(process.env.PORT ?? 8080);
-mkdirSync(DATA, { recursive: true });
-const dbFile = join(DATA, 'foundry.sqlite');
-await restore(dbFile);
-const db = new SqliteD1(dbFile, { onWrite: scheduleSnapshot });
-setSnapshotDatabase(db);
-const applied = migrate(db.db, process.env.MIGRATIONS_DIR ?? join(root, 'drizzle'));
-if (applied.length) console.log(`applied migrations: ${applied.join(', ')}`);
+/**
+ * Cloud SQL when DATABASE_URL is set, otherwise the single-instance SQLite file.
+ *
+ * Only the Postgres path can run more than one instance: the SQLite database
+ * lives in the container's own filesystem, so a second instance would hold a
+ * separate copy and the last snapshot back to Cloud Storage would silently win.
+ */
+const databaseUrl = process.env.DATABASE_URL;
+let db;
+let sqliteFile = null;
+if (databaseUrl) {
+  db = new PostgresD1({
+    connectionString: databaseUrl,
+    max: Number(process.env.PG_POOL_MAX ?? 10),
+    // Cloud SQL closes idle connections; fail fast rather than hang a request.
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 30_000,
+  });
+  await db.exec(readFileSync(join(here, 'schema.postgres.sql'), 'utf8'));
+  console.log('using Cloud SQL');
+} else {
+  mkdirSync(DATA, { recursive: true });
+  sqliteFile = join(DATA, 'foundry.sqlite');
+  await restore(sqliteFile);
+  db = new SqliteD1(sqliteFile, { onWrite: scheduleSnapshot });
+  setSnapshotDatabase(db);
+  const applied = migrate(db.db, process.env.MIGRATIONS_DIR ?? join(root, 'drizzle'));
+  if (applied.length) console.log(`applied migrations: ${applied.join(', ')}`);
+}
 // Only the app's own configuration crosses into the worker; the rest of the
 // process environment stays out of application code.
 const CONFIG = [
-  // AUTH_MODE must reach the app: without it the header-trusting path stays
-  // live behind IAP and anyone could forge an identity.
-  'AUTH_MODE',
-  'IAP_AUDIENCE',
   'GEMINI_API_KEY',
   'OPENROUTER_API_KEY',
   'OPENROUTER_SITE_URL',
@@ -40,6 +60,8 @@ const CONFIG = [
   'FOUNDRY_MODEL',
   'FOUNDRY_INPUT_PRICE_PER_MILLION',
   'FOUNDRY_OUTPUT_PRICE_PER_MILLION',
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET',
   'COMPOSIO_API_KEY',
   'LANGSMITH_API_KEY',
   'LANGSMITH_PROJECT',
@@ -91,9 +113,7 @@ async function handle(request) {
 const server = createServer(async (req, res) => {
   try {
     const response = await handle(toRequest(req));
-    const headers = {};
-    for (const [key, value] of response.headers) headers[key] = value;
-    res.writeHead(response.status, headers);
+    res.writeHead(response.status, toNodeHeaders(response));
     if (response.body) await pipeline(Readable.fromWeb(response.body), res);
     else res.end();
   } catch (error) {
@@ -111,6 +131,7 @@ for (const signal of ['SIGTERM', 'SIGINT'])
     if (closing) return;
     closing = true;
     server.close();
-    await shutdown(db, dbFile);
+    if (sqliteFile) await shutdown(db, sqliteFile);
+    else await db.close().catch(() => {});
     process.exit(0);
   });

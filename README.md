@@ -535,11 +535,13 @@ The preview advances while the selected task is open and automatic continuation 
 | Runtime | State path | Present boundary |
 |---|---|---|
 | Local Workers/Vinext | Local D1 through Wrangler | Used for recorded local demos and state checks |
-| Node / Cloud Run adapter | SQLite D1 compatibility; optional Cloud Storage snapshots | Newly implemented adapter; current snapshot design requires one instance |
+| Node / Cloud Run adapter | D1-compatible surface over Cloud SQL PostgreSQL, or SQLite locally | Shared transactional storage; instance count no longer constrained by the database |
 
-The Node adapter bridges the Worker bundle rather than introducing another agent engine. Optional cloud persistence snapshots local SQLite. Multiple instances with independent databases would create conflicting writers to a shared snapshot destination, so this is not a horizontally scalable database design. Snapshot delay and process failure create a recovery window. The adapter’s presence does not establish a tested production deployment or service-level objective.
+The Node adapter bridges the Worker bundle rather than introducing another agent engine. Deployed state lives in Cloud SQL PostgreSQL, reached through a D1-compatible adapter so the queries and the lease/revision concurrency control are unchanged. The earlier design snapshotted a local SQLite file to Cloud Storage, which meant two instances would each hold their own copy and the last snapshot would silently discard the other's work; that constraint is removed. Local development still uses SQLite, so every query is kept free of engine-specific SQL. Shared storage removes the database ceiling on instance count; it does not by itself establish a tested production deployment or a service-level objective, and run advancement is still driven by the open browser.
 
-Authentication depends on runtime mode. IAP mode verifies signed identity tokens against issuer, audience, and timing requirements. Sites mode relies on identity headers from a trusted platform boundary. Explicit open mode gives all visitors one workspace and is not tenant isolation. Owner-scoped SQL checks are only meaningful when the identity itself is trustworthy.
+Authentication is performed by the application itself. Accounts use email and password, with PBKDF2-SHA256 hashes under a per-account salt, session tokens stored only as a SHA-256 digest, `HttpOnly` and `SameSite=Lax` cookies, and per-address sign-in throttling. No request header, query parameter, or body field may name an owner. Owner-scoped SQL checks are only meaningful when the identity itself is trustworthy, which is why the earlier header-trusting and proxy-delegated modes were removed rather than kept as options.
+
+This replaced Identity-Aware Proxy, which authenticated the whole origin. That was sound for a single operator and wrong for a product feature: a published workflow link was refused before the application saw the request, so both links that had been created sat unused. Account-level authentication makes a shared link usable by its recipient while still isolating their session and their connected apps. Email verification, password reset, and team membership are not implemented.
 
 Ownership checks, bounded capabilities, leases, receipts, and traceable decisions are production foundations. Enterprise acceptance still needs a durable scheduler, quotas, organizational policies, credential lifecycle management, retention/deletion procedures, load tests, security review, and real authorized workflows. See [the adapter](server/index.mjs), [snapshot persistence](server/persistence.mjs), and [deployment guide](docs/DEPLOY_GCP.md). Local operation is sufficient to reproduce the demos; this report does not require deployment.
 
@@ -561,7 +563,7 @@ The strongest findings concern inspectability and bounded behavior. Several fact
 
 7. **External-state uncertainty.** Successful calls do not verify every desired state transition. Receipts cannot create a transaction across providers. Uncertain mutations need reconciliation.
 
-8. **Limited scale evidence.** Client-driven advancement, serial execution, bounded history, and single-instance snapshots constrain operation. Multi-tenant load and uninterrupted background autonomy are unproven.
+8. **Limited scale evidence.** Client-driven advancement, serial execution, and bounded history still constrain operation. Storage is now shared and transactional rather than a single-instance file, but multi-tenant load and uninterrupted background autonomy remain unproven.
 
 9. **Integration coverage.** Catalog discovery exceeds tested access. Real Google Docs-to-PowerPoint export, linked-account finance automation, and cross-task tool-learning gains remain unverified. The synthetic `/lab` harness cannot substitute for them.
 
@@ -597,7 +599,7 @@ npm ci
 cp .env.example .dev.vars
 ```
 
-On an existing installation, retain the configured `.dev.vars` rather than replacing it. Edit this file locally with `GEMINI_API_KEY` and `FOUNDRY_MODEL=gemini-3.8-flash`. Add `COMPOSIO_API_KEY` for discovery and connections. Provider keys belong on the server, not in browser code or committed files. Each external account still needs authorization. Local traces work without a LangSmith key.
+On an existing installation, retain the configured `.dev.vars` rather than replacing it. The current default is OpenRouter: set `FOUNDRY_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, and `FOUNDRY_MODEL=openai/gpt-4o`. Gemini remains selectable with `FOUNDRY_PROVIDER=gemini`, `GEMINI_API_KEY`, and `FOUNDRY_MODEL=gemini-3.8-flash`, which is what the historical experiments in this report used. Add `COMPOSIO_API_KEY` for discovery and connections. Provider keys belong on the server, not in browser code or committed files. Each external account still needs authorization. Local traces work without a LangSmith key.
 
 Initialize local D1 and start the workspace:
 
@@ -606,7 +608,7 @@ npm exec wrangler -- d1 migrations apply DB --local --config wrangler.local.json
 npm run dev -- --hostname 127.0.0.1 --port 3000
 ```
 
-Open [the local workspace](http://127.0.0.1:3000). This is the Workers/Vinext development path used for local demos. Authentication depends on the configured runtime and trusted host integration; Sites identity headers do not authenticate an arbitrary exposed Node server. The [deployment section](#11-persistence-concurrency-and-deployment-boundaries) explains the separate adapter.
+Open [the landing page](http://127.0.0.1:3000), create an account, and the workspace is at `/app`. This is the Workers/Vinext development path used for local demos. The [deployment section](#11-persistence-concurrency-and-deployment-boundaries) explains the separate Node adapter and how identity is established.
 
 ### 14.2 Reproduce checks and experiments
 
@@ -636,13 +638,7 @@ node --experimental-strip-types scripts/finance-demos.ts
 
 Re-execution reproduces the method, not necessarily the recorded outputs. Sampling is stochastic and provider behavior can change. The finance harness writes local histories under `outputs/finance-demos`; `--resume` skips completed fixtures, and `--repair` applies the documented invoice reporting correction after a failed separate review. This flag is a demo-specific follow-up, not a general autonomous repair algorithm.
 
-The original reference benchmark remains explicitly synthetic:
-
-```sh
-npm run benchmark
-```
-
-It exercises a deterministic reference optimizer across analytics, customer operations, and scheduling. Keep those results separate from live Gemini and Composio evidence.
+The original reference benchmark — a deterministic synthetic optimizer over analytics, customer operations, and scheduling fixtures — was removed from the repository on September 28, 2026, along with its API routes and `lib/engine/`. It had no remaining product surface. Its recorded results stay in this report and are kept separate from live provider and Composio evidence; they are no longer re-runnable from this tree.
 
 The [local demo guide](docs/LOCAL_DEMOS.md) explains recording, retained histories, and snapshot import. Import tooling backs up local state and preserves existing task IDs. Starting the application does not automatically migrate hosted task data.
 

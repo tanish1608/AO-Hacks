@@ -23,7 +23,7 @@ import {
   type Run,
   type Chat,
 } from '../lib/workbench/types.ts';
-import { digest } from '../lib/engine/runtime.ts';
+import { digest } from '../lib/workbench/digest.ts';
 const workflow: Workflow = {
   title: 'Invoice summary',
   explanation: 'Return a verified JSON summary.',

@@ -11,7 +11,10 @@ import {
   GitBranch,
   Layers3,
   LoaderCircle,
+  LogOut,
+  MailCheck,
   MessageSquare,
+  Presentation,
   Play,
   Plus,
   RotateCcw,
@@ -25,12 +28,13 @@ import WorkflowTests from './workflow-tests';
 import WorkflowPublish from './workflow-publish';
 import ActionReview from './action-review';
 import { type WorkflowRow } from '@/lib/workbench/workspace';
-import startupDemos from '@/lib/workbench/startup-demos.json';
+import financeWorkflows from '@/lib/workbench/finance-workflows.json';
 import { combineRunInput, type InputDocument } from '@/lib/workbench/documents';
 import ReactMarkdown from 'react-markdown';
 import WorkflowOutput from './workflow-output';
 import remarkGfm from 'remark-gfm';
 import BrandLogo from './brand-logo';
+import ModelPicker from './model-picker';
 import WorkflowCanvas from './workflow-canvas';
 import AppPicker, { AppIcon } from './app-picker';
 import RunConversation from './run-conversation';
@@ -39,6 +43,7 @@ import { emptyUsage } from '@/lib/workbench/types';
 import type { RunMetric, ToolKnowledgeRecord } from '@/lib/workbench/types';
 import { ablation, learningTrend, median } from '@/lib/workbench/metrics';
 import { MAX_PAIRS } from '@/lib/workbench/experiment';
+import { DEFAULT_MODEL, MODELS, modelChoice } from '@/lib/workbench/models';
 import { PairedBars, TrendLine } from './learning-charts';
 import { ALL_APPS, APP_CATALOG, appDefinition } from '@/lib/workbench/apps';
 import { Button } from './ui/button';
@@ -116,10 +121,16 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
 const percent = (x: number) => `${Math.round(x * 100)}%`;
 const money = (x: number | null) =>
   x === null ? 'Unpriced' : `$${x.toFixed(4)}`;
-const examples = startupDemos.map((demo, i) => ({
-  ...demo,
-  icon: [Layers3, FileText, GitBranch][i],
-}));
+/** Three the home screen offers first: one that needs connected accounts, one
+ *  that produces an artifact, and one that runs with nothing connected. */
+const STARTERS: Record<string, typeof Layers3> = {
+  'campaign-replies': MailCheck,
+  'docx-to-deck': Presentation,
+  'pdf-to-doc': FileText,
+};
+const examples = financeWorkflows
+  .filter((w) => w.id in STARTERS)
+  .map((w) => ({ ...w, icon: STARTERS[w.id] }));
 function TaskButton({
   onClick,
   ...props
@@ -161,6 +172,10 @@ const appTileStyle: React.CSSProperties = {
   padding: '13px 6px 10px',
   textAlign: 'center',
 };
+async function signOut() {
+  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  window.location.assign('/');
+}
 function rememberTask(id: string | null) {
   const url = new URL(window.location.href);
   if (id) url.searchParams.set('task', id);
@@ -190,7 +205,13 @@ function TaskActionButton({
     />
   );
 }
-export default function ChatWorkspace() {
+export default function ChatWorkspace({
+  accountName,
+  accountEmail,
+}: {
+  accountName: string;
+  accountEmail: string;
+}) {
   const [rows, setRows] = useState<ChatRow[]>([]),
     [snapshot, setSnapshot] = useState<Snapshot | null>(null),
     [draft, setDraft] = useState(''),
@@ -218,6 +239,8 @@ export default function ChatWorkspace() {
     [readingDocument, setReadingDocument] = useState(false),
     [manualStarting, setManualStarting] = useState(false),
     [resultsId, setResultsId] = useState('');
+  const [limitModel, setLimitModel] = useState(DEFAULT_MODEL);
+  const [draftModel, setDraftModel] = useState<string | undefined>(undefined);
   const [abInput, setAbInput] = useState('');
   const [abPairs, setAbPairs] = useState(2);
   const [allAppsOpen, setAllAppsOpen] = useState(false);
@@ -389,6 +412,31 @@ export default function ChatWorkspace() {
   useEffect(() => {
     scrollEnd.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chat?.messages.length, busy, pendingMessage]);
+  /** Older runs arrive without traces to keep the polled response bounded.
+   *  Fetch one in full when the user actually opens it. */
+  const hydrateRun = useCallback(async (chatId: string, runId: string) => {
+    try {
+      const { run } = await api<{ run: Run }>(
+        `/api/chats/${chatId}?run=${encodeURIComponent(runId)}`,
+      );
+      if (!mounted.current) return;
+      setSnapshot((current) =>
+        current && current.chat.id === chatId
+          ? {
+              ...current,
+              runs: current.runs.map((r) => (r.id === run.id ? run : r)),
+            }
+          : current,
+      );
+    } catch {
+      /* The dialog still opens; it simply shows no step log. */
+    }
+  }, []);
+  const openResults = (runId: string) => {
+    setResultsId(runId);
+    const target = snapshot?.runs.find((r) => r.id === runId);
+    if (chat && target?.tracesOmitted) void hydrateRun(chat.id, runId);
+  };
   const accept = (data: Snapshot) => {
     if (selectedId.current === data.chat.id) {
       setSnapshot(data);
@@ -456,6 +504,7 @@ export default function ChatWorkspace() {
           message,
           selectedApps,
           initialize: true,
+          ...(draftModel ? { model: draftModel } : {}),
         });
       }
       selectedId.current = current.chat.id;
@@ -646,9 +695,22 @@ export default function ChatWorkspace() {
             )
             .map((c) => c.slug)}
         />
-        <span className="model-label">
-          {integrations?.model ?? 'Model not configured'}
-        </span>
+        <ModelPicker
+          value={chat?.settings.model}
+          fallback={integrations?.model}
+          disabled={busy || Boolean(activeRun)}
+          onChange={(model) => {
+            // Before a workflow exists the choice is held for the one the
+            // composer is about to create; after, it is saved on the workflow.
+            if (!chat) return setDraftModel(model);
+            void act('settings', {
+              target: chat.settings.target,
+              maxIterations: chat.settings.maxIterations,
+              maxToolCalls: chat.settings.maxToolCalls,
+              model,
+            });
+          }}
+        />
         <Button
           className="send-button"
           size="icon"
@@ -738,6 +800,25 @@ export default function ChatWorkspace() {
                 <span>Settings & integrations</span>
               </TaskButton>
             </SidebarMenuItem>
+            <SidebarMenuItem>
+              <div className="account-menu">
+                <span className="account-avatar" aria-hidden>
+                  {accountName.trim().charAt(0) || accountEmail.charAt(0)}
+                </span>
+                <div>
+                  <strong>{accountName}</strong>
+                  <small title={accountEmail}>{accountEmail}</small>
+                </div>
+                <button
+                  className="account-signout"
+                  title="Sign out"
+                  aria-label="Sign out"
+                  onClick={() => void signOut()}
+                >
+                  <LogOut size={15} />
+                </button>
+              </div>
+            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>
       </Sidebar>
@@ -809,11 +890,17 @@ export default function ChatWorkspace() {
               <h1>What work do you want to repeat?</h1>
               <p>
                 Describe the input, the result you need, and any exceptions.
-                <br className="desktop-break" /> We’ll build a workflow you can
-                test and reuse.
+                <br className="desktop-break" /> Foundry designs a team of
+                agents to do it, tests them, and shows you the evidence.
               </p>
             </div>
             <div className="home-compose">{composer}</div>
+            <p className="home-caption">
+              <Layers3 size={13} />
+              Every workflow becomes a graph of specialized agents you can open,
+              edit, and re-test — each one with its own instruction and its own
+              connected apps.
+            </p>
             <div className="starter-grid">
               {examples.map(({ icon: Icon, ...e }) => (
                 <button
@@ -845,7 +932,7 @@ export default function ChatWorkspace() {
                   {chat.messages.map((m) =>
                     m.kind ? (
                       <RunConversation
-                        onDetails={() => setResultsId(m.runId ?? '')}
+                        onDetails={() => openResults(m.runId ?? '')}
                         key={m.id}
                         message={m}
                         run={snapshot.runs.find((r) => r.id === m.runId)}
@@ -982,7 +1069,7 @@ export default function ChatWorkspace() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => setResultsId(testRun.id)}
+                        onClick={() => openResults(testRun.id)}
                       >
                         View test results
                         <ArrowUpRight size={12} />
@@ -1005,6 +1092,7 @@ export default function ChatWorkspace() {
                           );
                           setLimitAttempts(chat.settings.maxIterations);
                           setLimitTools(chat.settings.maxToolCalls);
+                          setLimitModel(chat.settings.model ?? DEFAULT_MODEL);
                           setLimitsOpen(true);
                         }}
                       >
@@ -1136,6 +1224,36 @@ export default function ChatWorkspace() {
                         </span>
                       </div>
                       <TabsContent value="workflow" className="canvas-tab">
+                        {/* The architect writes an explanation on every design
+                            and it was shown nowhere, so opening a workflow gave
+                            you boxes and no statement of what it does. */}
+                        {workflow && (
+                          <div className="workflow-summary">
+                            <h2>{workflow.title}</h2>
+                            <p>{workflow.explanation}</p>
+                            <div className="workflow-summary-facts">
+                              <span>
+                                {workflow.nodes.length} agent
+                                {workflow.nodes.length === 1 ? '' : 's'}
+                              </span>
+                              <span>
+                                {workflow.criteria.length} check
+                                {workflow.criteria.length === 1 ? '' : 's'}
+                              </span>
+                              {[
+                                ...new Set(workflow.nodes.flatMap((n) => n.toolkits)),
+                              ].map((slug) => (
+                                <span key={slug} className="workflow-summary-app">
+                                  <AppIcon slug={slug} size={13} />
+                                  {appDefinition(slug)?.name ?? slug}
+                                </span>
+                              ))}
+                              {!workflow.nodes.some((n) => n.toolkits.length) && (
+                                <span>No connected apps needed</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         {workflow && (
                           <WorkflowCanvas
                             key={chat.id}
@@ -1497,26 +1615,6 @@ export default function ChatWorkspace() {
                           onLoading={setReadingDocument}
                           disabled={busy || Boolean(activeRun)}
                         />
-                        {startupDemos
-                          .filter((d) => d.title === chat.title)
-                          .map((d) => (
-                            <div className="demo-input-actions" key={d.id}>
-                              <Button
-                                variant="outline"
-                                disabled={busy || Boolean(activeRun)}
-                                onClick={() => setManualInput(d.cases[0].input)}
-                              >
-                                Use sample input
-                              </Button>
-                              <a href={`/demos/${d.id}.txt`} download>
-                                Download sample packet
-                              </a>
-                              <small>
-                                Fictional sample data. Replace it with your own
-                                sources.
-                              </small>
-                            </div>
-                          ))}
                         <p className="quiet-text">
                           {(
                             manualInput.length +
@@ -1701,6 +1799,10 @@ export default function ChatWorkspace() {
           key={resultsId}
           initialId={resultsId}
           runs={testRuns}
+          onSelect={(runId) => {
+            const target = testRuns.find((r) => r.id === runId);
+            if (chat && target?.tracesOmitted) void hydrateRun(chat.id, runId);
+          }}
           onClose={() => setResultsId('')}
         />
       )}
@@ -1802,6 +1904,26 @@ export default function ChatWorkspace() {
               onChange={(e) => setLimitAttempts(Number(e.target.value))}
             />
           </label>
+          <label htmlFor="wb-field-model" className="field-label">
+            Model
+            <NativeSelect
+              id="wb-field-model"
+              value={limitModel}
+              onChange={(e) => setLimitModel(e.target.value)}
+            >
+              {MODELS.map((m) => (
+                <NativeSelectOption key={m.id} value={m.id}>
+                  {m.name} · {m.maker}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            <small className="model-note">
+              {modelChoice(limitModel)?.note} Roughly $
+              {modelChoice(limitModel)?.inputPrice}/M in, $
+              {modelChoice(limitModel)?.outputPrice}/M out. Recorded cost always
+              comes from what the provider actually billed.
+            </small>
+          </label>
           <label htmlFor="wb-field-5" className="field-label">
             Tool-call budget for the entire run
             <Input
@@ -1850,6 +1972,7 @@ export default function ChatWorkspace() {
                 target: limitTarget / 100,
                 maxIterations: limitAttempts,
                 maxToolCalls: limitTools,
+                model: limitModel,
               }).then((data) => {
                 if (data) setLimitsOpen(false);
               })

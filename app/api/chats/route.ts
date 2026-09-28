@@ -7,6 +7,7 @@ import {
   readJson,
 } from '@/lib/server/security';
 import { createChat, design } from '@/lib/workbench/engine';
+import { validateModel } from '@/lib/workbench/models';
 import { dependencies } from '@/lib/server/workbench-provider';
 import { insertChat, listChats, snapshot } from '@/lib/server/workbench-store';
 export async function GET(request: Request) {
@@ -29,6 +30,9 @@ export async function POST(request: Request) {
     const chat = createChat(crypto.randomUUID());
     try {
       chat.selectedApps = validateAppSelection(body.selectedApps);
+      // A model chosen on the home screen, before this workflow existed.
+      const model = validateModel(body.model);
+      if (model) chat.settings = { ...chat.settings, model };
     } catch (e) {
       throw new HttpError(400, (e as Error).message);
     }

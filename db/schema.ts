@@ -6,39 +6,46 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
-export const experiments = sqliteTable(
-  'experiments',
+export const users = sqliteTable(
+  'users',
   {
     id: text('id').primaryKey(),
-    ownerId: text('owner_id').notNull(),
+    email: text('email').notNull(),
     name: text('name').notNull(),
-    status: text('status').notNull(),
-    revision: integer('revision').notNull().default(0),
-    payload: text('payload').notNull(),
+    // pbkdf2$<iterations>$<salt>$<hash>, all base64. Never a bare digest.
+    // Holds the literal 'none' for an account that signs in with Google only:
+    // verifyPassword rejects any value whose scheme is not pbkdf2, so a
+    // password can never be guessed into one of those accounts.
+    passwordHash: text('password_hash').notNull(),
+    // Google's stable subject claim. Null until an account links Google.
+    googleSub: text('google_sub'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
-    leaseToken: text('lease_token'),
-    leaseUntil: integer('lease_until'),
-  },
-  (t) => [index('idx_experiments_owner_created').on(t.ownerId, t.createdAt)],
-);
-export const releases = sqliteTable(
-  'releases',
-  {
-    id: text('id').primaryKey(),
-    ownerId: text('owner_id').notNull(),
-    experimentId: text('experiment_id')
-      .notNull()
-      .references(() => experiments.id),
-    architectureDigest: text('architecture_digest').notNull(),
-    payload: text('payload').notNull(),
-    createdAt: text('created_at').notNull(),
   },
   (t) => [
-    index('idx_releases_owner_created').on(t.ownerId, t.createdAt),
-    uniqueIndex('idx_releases_owner_experiment').on(t.ownerId, t.experimentId),
+    uniqueIndex('idx_users_email').on(t.email),
+    uniqueIndex('idx_users_google_sub').on(t.googleSub),
   ],
 );
+export const sessions = sqliteTable(
+  'sessions',
+  {
+    // SHA-256 of the cookie token. A stolen database row cannot be replayed
+    // as a cookie, the same reason passwords are not stored in the clear.
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt: text('created_at').notNull(),
+    expiresAt: text('expires_at').notNull(),
+  },
+  (t) => [index('idx_sessions_user').on(t.userId, t.expiresAt)],
+);
+export const authThrottle = sqliteTable('auth_throttle', {
+  key: text('key').primaryKey(),
+  failures: integer('failures').notNull().default(0),
+  resetAt: text('reset_at').notNull(),
+});
 export const chats = sqliteTable(
   'chats',
   {
@@ -47,6 +54,10 @@ export const chats = sqliteTable(
     title: text('title').notNull(),
     revision: integer('revision').notNull().default(0),
     payload: text('payload').notNull(),
+    // Derived from payload on write. The sidebar listing used SQLite JSON
+    // functions to read these without downloading every payload; a real column
+    // is faster and, unlike json_extract, is the same SQL on any engine.
+    steps: integer('steps').notNull().default(0),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
     leaseToken: text('lease_token'),
@@ -64,6 +75,10 @@ export const agentRuns = sqliteTable(
     ownerId: text('owner_id').notNull(),
     status: text('status').notNull(),
     payload: text('payload').notNull(),
+    // Also derived on write, for the same reason.
+    mode: text('mode'),
+    error: text('error'),
+    pendingStatus: text('pending_status'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },

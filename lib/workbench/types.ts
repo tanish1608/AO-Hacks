@@ -1,4 +1,12 @@
-import type { Json, Usage } from '../engine/types.ts';
+/** Any JSON-serializable value; tool arguments and results are stored as these. */
+export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+  /** Null when pricing is unknown for the call. Never report an unpriced call as free. */
+  costUsd: number | null;
+  model: string | null;
+}
 export interface AgentNode {
   id: string;
   name: string;
@@ -77,7 +85,13 @@ export interface Chat {
   messages: Message[];
   versions: WorkflowVersion[];
   memory: Memory[];
-  settings: { target: number; maxIterations: number; maxToolCalls: number };
+  settings: {
+    target: number;
+    maxIterations: number;
+    maxToolCalls: number;
+    /** Chosen from lib/workbench/models.ts. Unset means the deployment default. */
+    model?: string;
+  };
   selectedApps?: string[];
   sessionId: string | null;
   modelUsage: Usage;
@@ -158,6 +172,9 @@ export interface PendingAction {
   status: 'awaiting_approval' | 'executing' | 'unknown';
 }
 export interface Run {
+  /** Set when the API sent this run without its traces to keep the response
+   *  bounded. Fetch the run on its own to get the full step log. */
+  tracesOmitted?: boolean;
   validationId?: string;
   regressionCase?: import('./improvement.ts').RegressionCase;
   /** Freeze approved rules so later edits cannot change an in-flight run. */

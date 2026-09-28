@@ -9,7 +9,7 @@ import { createAssets } from './assets.mjs';
 import { SqliteD1 } from './d1-sqlite.mjs';
 import { assignEnv, env } from './workers-shim.mjs';
 import { migrate } from './migrate.mjs';
-import { restore, scheduleSnapshot, shutdown } from './persistence.mjs';
+import { restore, scheduleSnapshot, shutdown, setSnapshotDatabase } from './persistence.mjs';
 import { runtimePolicy } from './runtime-policy.mjs';
 const runtime = runtimePolicy(process.env);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -21,6 +21,7 @@ mkdirSync(DATA, { recursive: true });
 const dbFile = join(DATA, 'foundry.sqlite');
 await restore(dbFile);
 const db = new SqliteD1(dbFile, { onWrite: scheduleSnapshot });
+setSnapshotDatabase(db);
 const applied = migrate(db.db, process.env.MIGRATIONS_DIR ?? join(root, 'drizzle'));
 if (applied.length) console.log(`applied migrations: ${applied.join(', ')}`);
 // Only the app's own configuration crosses into the worker; the rest of the

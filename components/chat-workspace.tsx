@@ -25,10 +25,10 @@ import WorkflowTests from './workflow-tests';
 import WorkflowPublish from './workflow-publish';
 import ActionReview from './action-review';
 import { type WorkflowRow } from '@/lib/workbench/workspace';
-import financeDemos from '@/lib/workbench/finance-demos.json';
-import { zohoInvoiceStarter } from '@/lib/workbench/starter-prompts';
+import startupDemos from '@/lib/workbench/startup-demos.json';
 import { combineRunInput, type InputDocument } from '@/lib/workbench/documents';
 import ReactMarkdown from 'react-markdown';
+import WorkflowOutput from './workflow-output';
 import remarkGfm from 'remark-gfm';
 import BrandLogo from './brand-logo';
 import WorkflowCanvas from './workflow-canvas';
@@ -116,38 +116,10 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
 const percent = (x: number) => `${Math.round(x * 100)}%`;
 const money = (x: number | null) =>
   x === null ? 'Unpriced' : `$${x.toFixed(4)}`;
-const financeStarters = financeDemos.map((demo) => ({
+const examples = startupDemos.map((demo, i) => ({
   ...demo,
-  ...(demo.id === 'invoice-drafts'
-    ? zohoInvoiceStarter
-    : { apps: [] as string[] }),
+  icon: [Layers3, FileText, GitBranch][i],
 }));
-const examples = [
-  {
-    icon: FileText,
-    apps: ['googledocs', 'googleslides', 'googledrive'],
-    title: 'Turn a document into a deck',
-    description: 'Read, structure, design, and verify.',
-    prompt:
-      'Build agents that turn a Google Doc into an executive PowerPoint deck. Ask for my document URL in the workflow instructions, read the actual source, create slides, and export a real PPTX. Verify facts and the export before delivering.',
-  },
-  {
-    icon: Layers3,
-    apps: ['googledocs', 'composio_search'],
-    title: 'Build my editorial team',
-    description: 'Research, draft, and fact-check a blog.',
-    prompt:
-      'Build a blog production workflow: research from my Google Docs, draft a clear article, check every factual claim against source evidence, and prepare a final Google Doc for my review. The topic and source URLs will follow.',
-  },
-  {
-    icon: GitBranch,
-    apps: ['github'],
-    title: 'Make sense of project activity',
-    description: 'Connect issues, context, and decisions.',
-    prompt:
-      'Build agents that read GitHub project issues and pull requests, identify release blockers and their owners, and prepare a source-linked weekly status report. I will provide the repository.',
-  },
-];
 function TaskButton({
   onClick,
   ...props
@@ -858,30 +830,6 @@ export default function ChatWorkspace() {
                 </button>
               ))}
             </div>
-            <details className="finance-demo-gallery">
-              <summary>Start from a finance example</summary>
-              <p>
-                Practice with sample Excel files. Creating invoice drafts
-                requires Zoho Books; the other examples use documents only.
-              </p>
-              {financeStarters.map((d) => (
-                <div key={d.id}>
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setDraft(d.prompt);
-                      setSelectedApps(d.apps);
-                    }}
-                  >
-                    <FileText size={16} />
-                    {d.title}
-                  </Button>
-                  <a href={`/demos/${d.id}.xlsx`} download>
-                    Download Excel input
-                  </a>
-                </div>
-              ))}
-            </details>
           </div>
         ) : (
           <ResizablePanelGroup
@@ -1549,62 +1497,24 @@ export default function ChatWorkspace() {
                           onLoading={setReadingDocument}
                           disabled={busy || Boolean(activeRun)}
                         />
-                        {financeDemos
-                          .filter(
-                            (d) =>
-                              d.title === chat.title ||
-                              financeStarters.find(
-                                (starter) => starter.id === d.id,
-                              )?.title === chat.title,
-                          )
+                        {startupDemos
+                          .filter((d) => d.title === chat.title)
                           .map((d) => (
                             <div className="demo-input-actions" key={d.id}>
                               <Button
                                 variant="outline"
-                                disabled={
-                                  busy || Boolean(activeRun) || readingDocument
-                                }
-                                onClick={async () => {
-                                  setReadingDocument(true);
-                                  try {
-                                    const response = await fetch(
-                                      `/demos/${d.id}.xlsx`,
-                                    );
-                                    if (!response.ok)
-                                      throw new Error(
-                                        'Could not load the demo workbook.',
-                                      );
-                                    const bytes = new Uint8Array(
-                                      await response.arrayBuffer(),
-                                    );
-                                    const { extractWorkbook } =
-                                      await import('@/lib/workbench/xlsx-input');
-                                    setInputDocuments([
-                                      {
-                                        name: `${d.id}.xlsx`,
-                                        size: bytes.length,
-                                        text: extractWorkbook(bytes),
-                                      },
-                                    ]);
-                                    setManualInput(
-                                      'Process the attached synthetic workbook. Return the complete deliverable and exceptions.',
-                                    );
-                                  } catch (e) {
-                                    setError(
-                                      e instanceof Error
-                                        ? e.message
-                                        : 'Could not read workbook',
-                                    );
-                                  } finally {
-                                    setReadingDocument(false);
-                                  }
-                                }}
+                                disabled={busy || Boolean(activeRun)}
+                                onClick={() => setManualInput(d.cases[0].input)}
                               >
-                                Use demo Excel input
+                                Use sample input
                               </Button>
-                              <a href={`/demos/${d.id}.xlsx`} download>
-                                Download workbook
+                              <a href={`/demos/${d.id}.txt`} download>
+                                Download sample packet
                               </a>
+                              <small>
+                                Fictional sample data. Replace it with your own
+                                sources.
+                              </small>
                             </div>
                           ))}
                         <p className="quiet-text">
@@ -1761,11 +1671,7 @@ export default function ChatWorkspace() {
                                   · {state.status}
                                 </summary>
                                 <div className="message-content">
-                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                    {state.output ||
-                                      state.error ||
-                                      'Waiting for this agent.'}
-                                  </ReactMarkdown>
+                                  <WorkflowOutput output={state.output || state.error || 'Waiting for this agent.'}/>
                                 </div>
                               </details>
                             ))}

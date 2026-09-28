@@ -6,13 +6,14 @@ import Database from 'better-sqlite3';
  * control that depends on their exact semantics.
  */
 class Statement {
-  constructor(db, sql, args = []) {
+  constructor(db, sql, args = [], onWrite) {
     this.db = db;
     this.sql = sql;
     this.args = args;
+    this.onWrite = onWrite;
   }
   bind(...args) {
-    return new Statement(this.db, this.sql, args);
+    return new Statement(this.db, this.sql, args, this.onWrite);
   }
   #prepared() {
     return this.db.prepare(this.sql);
@@ -28,6 +29,7 @@ class Statement {
   }
   async run() {
     const info = this.#prepared().run(...this.args);
+    this.onWrite?.();
     return {
       results: [],
       success: true,
@@ -35,7 +37,9 @@ class Statement {
     };
   }
   async raw() {
-    return this.#prepared().raw().all(...this.args);
+    return this.#prepared()
+      .raw()
+      .all(...this.args);
   }
   #meta(changes, lastRowId = 0) {
     return {
@@ -75,7 +79,7 @@ export class SqliteD1 {
     this.onWrite = onWrite;
   }
   prepare(sql) {
-    return new Statement(this.db, sql);
+    return new Statement(this.db, sql, [], this.onWrite);
   }
   async batch(statements) {
     // D1 applies a batch atomically; so does this.

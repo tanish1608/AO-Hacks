@@ -4475,3 +4475,6 @@ body:has(.public-workflow) { background: #fafbfc; }
 .public-workflow .public-intro { padding-top:24px; padding-bottom:20px; }
 .hosted-sidebar > .public-card:first-child > p:last-child { margin-bottom:0; }
 .hosted-input .document-input > .quiet-text { font-size:11px; line-height:1.5; margin:8px 0; }
+.structured-output { margin-top:20px; border-top:1px solid #e5e7eb; padding-top:14px; }
+.structured-output summary { cursor:pointer; font-size:12px; color:#596579; }
+.structured-output pre { white-space:pre-wrap; overflow-wrap:anywhere; margin-top:12px; font-size:11px; line-height:1.6; max-height:500px; overflow:auto; }

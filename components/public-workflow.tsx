@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import ReactMarkdown from 'react-markdown';
+import WorkflowOutput from './workflow-output';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import DocumentInput from './document-input';
@@ -442,7 +442,7 @@ export default function PublicWorkflow({
                   )}
                   {final?.output && (
                     <div className="markdown-body">
-                      <ReactMarkdown>{final.output}</ReactMarkdown>
+                      <WorkflowOutput output={final.output}/>
                     </div>
                   )}
                   {attempt.evaluation ? (

@@ -73,4 +73,14 @@ Historical results remain labeled with their original model and experimental sco
 
 ## Tested corrections and shareable workflows
 
-Use **Tests** to save inputs and deterministic expectations, test a candidate correction, and apply it only after the full suite passes one version. **Host** in the chat header creates a fixed workflow link in a copyable dropdown. Visitors see app connections and run inputs on the left, with the agent architecture on the right. Each visitor uses their own connections; the run is created automatically when they press Run workflow. See [workflow releases](docs/WORKFLOW_RELEASES.md) for the user flow, limits, and live evidence. Links remain local until a public deployment is configured.
+Use **Tests** to save inputs and deterministic expectations, test a candidate correction, and apply it only after the full suite passes one version. **Host** in the chat header creates a fixed workflow link in a copyable dropdown. Visitors see app connections and run inputs on the left, with the agent architecture on the right. Each visitor uses their own connections; the run is created automatically when they press Run workflow. See [workflow releases](docs/WORKFLOW_RELEASES.md) for the user flow, limits, and live evidence.
+
+## Startup demo workflows
+
+The current demo workspace is intentionally focused on useful startup operations rather than finance examples:
+
+- **Customer feedback:** deduplicate feedback, isolate conflicting IDs, find urgent risks, and prioritize product experiments.
+- **Market research:** compare dated evidence, surface contradictory competitor claims, and decide whether to launch or validate first.
+- **Launch readiness:** trace dependencies, detect unverified “done” tasks, and create a recovery plan without sending communications.
+
+Each workflow ships with a fictional source packet, deterministic checks, and a reserved follow-up case. The packets are synthetic and clearly labeled; replace them with your own material before relying on a result.

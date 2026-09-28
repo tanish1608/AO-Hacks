@@ -3724,7 +3724,7 @@ h3 {
 }
 .app-picker-item {
   gap: 10px !important;
-  padding: 9px !important;
+  padding: 9px 30px 9px 9px !important;
   border-radius: 6px !important;
 }
 .app-picker-item strong {
@@ -3742,6 +3742,7 @@ h3 {
 .picker-connected {
   margin-left: auto;
   color: #6e86af;
+  white-space: nowrap;
 }
 .connection-list {
   margin-top: 16px;

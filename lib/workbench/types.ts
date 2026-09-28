@@ -166,6 +166,9 @@ export interface PendingAction {
   status: 'awaiting_approval' | 'executing' | 'unknown';
 }
 export interface Run {
+  /** Set when the API sent this run without its traces to keep the response
+   *  bounded. Fetch the run on its own to get the full step log. */
+  tracesOmitted?: boolean;
   validationId?: string;
   regressionCase?: import('./improvement.ts').RegressionCase;
   /** Freeze approved rules so later edits cannot change an in-flight run. */

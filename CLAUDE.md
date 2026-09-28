@@ -35,7 +35,9 @@ observability optionally forwards to **LangSmith**.
 - Tailwind v4, shadcn primitives in `components/ui/**` (generated — do not hand-edit;
   they are lint-excluded), `@xyflow/react` for the canvas.
 - Auth is an application session cookie (`lib/server/auth.ts`, `app/auth.ts`); every row is
-  owner-scoped by `users.id`. No request header ever establishes identity.
+  owner-scoped by `users.id`. No request header ever establishes identity. Email/password
+  always works; Google sign-in appears only when `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+  are set.
 
 ## Commands
 
@@ -155,6 +157,18 @@ These are the substance of the track submission. Preserve them in any refactor.
     its `owner_id` predicate: the cookie says who you are, the `WHERE` clause is what confines
     you. `safeNextPath()` gates every post-sign-in redirect, or the login page becomes an
     open redirect that carries our name.
+17. **Google sign-in links accounts by address only when Google verified it.**
+    `verifyIdTokenClaims` requires `email_verified === true`, `aud === clientId`, the issuer,
+    the nonce from the state cookie, and the timestamps. Drop any one of those and someone can
+    take over an account they do not own — the audience check is what stops a token minted for
+    a different application being replayed here. A Google-only account stores the literal
+    `'none'` as its password hash; `verifyPassword` rejects every scheme that is not `pbkdf2`,
+    so no password can open it.
+18. **The API sends full step logs only for recent and active runs.** `trimRunDetail` keeps
+    traces for the newest `DETAILED_RUNS` plus anything running, paused, or awaiting approval,
+    and marks the rest `tracesOmitted`. Trim *after* computing metrics — `runMetrics` reads
+    tool traces to decide whether a delivery actually happened. A view that has no traces says
+    so rather than rendering an empty log, which would read as "this step recorded nothing".
 
 ### Honesty constraints in prose
 
@@ -167,11 +181,14 @@ results are retained on purpose. Do not upgrade these claims without new evidenc
 
 ```
 app/api/chats/[id]/[action]/route.ts   all chat mutations (message|run|advance|approve|…)
-app/api/auth/[action]/route.ts         signup | login | logout
+app/api/auth/[action]/route.ts         POST signup|login|logout; GET session|google
 app/auth.ts                            currentUser / requireUser from the session cookie
 lib/server/auth.ts                     users, sessions, sign-in throttling (D1)
+lib/server/google.ts                   code exchange + account linking (D1)
+lib/workbench/google-auth.ts           authorize URL, ID-token claim checks, state (pure)
 lib/workbench/password.ts              PBKDF2 hashing + digest (pure, so it is tested)
 lib/workbench/credentials.ts           email/name/password rules, safeNextPath (pure)
+lib/workbench/run-detail.ts            which runs ship their step log (pure)
 lib/workbench/digest.ts                canonical() + digest() used for every content hash
 components/{landing,auth-form}.tsx     public landing page and the sign-in/up form
 lib/workbench/engine.ts                the loop

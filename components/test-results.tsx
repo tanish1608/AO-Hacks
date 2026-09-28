@@ -14,10 +14,13 @@ export default function TestResults({
   runs,
   initialId,
   onClose,
+  onSelect,
 }: {
   runs: Run[];
   initialId: string;
   onClose: () => void;
+  /** Asks the parent to load a run whose step log was omitted. */
+  onSelect?: (runId: string) => void;
 }) {
   const [selected, setSelected] = useState(initialId),
     [index, setIndex] = useState(-1);
@@ -53,6 +56,7 @@ export default function TestResults({
                 onChange={(e) => {
                   setSelected(e.target.value);
                   setIndex(-1);
+                  onSelect?.(e.target.value);
                 }}
               >
                 {runs.map((r, i) => (
@@ -193,6 +197,9 @@ export default function TestResults({
             })}
             {attempt.evaluation?.checks.filter(c=>c.criterionId.startsWith('regression_')).map(c=><details key={c.criterionId} className="rubric-check"><summary><span>{c.rationale}<small>Saved deterministic check</small></span><strong>{c.score===1?'Passed':'Failed'}</strong></summary><p>Frozen before execution and evaluated by code. Model scores cannot override a failure.</p>{c.evidenceIds.map(id=><code key={id}>{id}</code>)}</details>)}
             <h3>Step log</h3>
+            {run.tracesOmitted && !attempt.traces.length && (
+              <p className="quiet-text">Loading the step log for this run…</p>
+            )}
             {attempt.traces.map((t) => (
               <details className="wb-trace" key={t.id}>
                 <summary>

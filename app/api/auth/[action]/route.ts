@@ -14,6 +14,16 @@ import {
 } from '@/lib/server/auth';
 import { currentUser } from '@/app/auth';
 import {
+  exchangeCode,
+  googleCredentials,
+  upsertGoogleUser,
+} from '@/lib/server/google';
+import {
+  authorizeUrl,
+  packState,
+  unpackState,
+} from '@/lib/workbench/google-auth';
+import {
   safeNextPath,
   validateLogin,
   validateSignup,
@@ -85,11 +95,83 @@ export async function POST(
     return failure(e);
   }
 }
-export async function GET() {
+const STATE_COOKIE = 'foundry_oauth';
+function stateCookie(value: string, secure: boolean, maxAge = 600) {
+  return `${STATE_COOKIE}=${encodeURIComponent(value)}; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? '; Secure' : ''}`;
+}
+/** Google redirects back with a top-level GET, so both legs live on GET. */
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ action: string }> },
+) {
   try {
-    const user = await currentUser();
-    return json({ user: user ? { email: user.email, name: user.name } : null });
+    const action = (await params).action;
+    if (action === 'session') {
+      const user = await currentUser();
+      return json({ user: user ? { email: user.email, name: user.name } : null });
+    }
+    if (action !== 'google') throw new HttpError(404, 'Unknown action');
+    const url = new URL(request.url);
+    const secure = isSecure(request);
+    // Google is told to come back to this exact path, so it must be rebuilt
+    // identically here or the token exchange is rejected.
+    const redirectUri = `${url.origin}/api/auth/google`;
+    const store = await cookies();
+    if (!url.searchParams.get('code')) {
+      if (url.searchParams.get('error'))
+        return Response.redirect(`${url.origin}/login?error=google`, 303);
+      const { clientId } = googleCredentials();
+      const nonce = crypto.randomUUID();
+      const next = safeNextPath(url.searchParams.get('next'));
+      return new Response(null, {
+        status: 303,
+        headers: {
+          Location: authorizeUrl({
+            clientId,
+            redirectUri,
+            state: packState(nonce, next),
+            nonce,
+          }),
+          // The state travels in a cookie as well as the URL; a callback that
+          // did not start here cannot produce a matching pair.
+          'Set-Cookie': stateCookie(packState(nonce, next), secure),
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+    const saved = unpackState(store.get(STATE_COOKIE)?.value);
+    const returned = unpackState(url.searchParams.get('state'));
+    const clear = stateCookie('', secure, 0);
+    if (!saved || !returned || saved.nonce !== returned.nonce)
+      return new Response(null, {
+        status: 303,
+        headers: { Location: `${url.origin}/login?error=state`, 'Set-Cookie': clear },
+      });
+    const profile = await exchangeCode(
+      url.searchParams.get('code')!,
+      redirectUri,
+      saved.nonce,
+    );
+    const user = await upsertGoogleUser(profile);
+    await pruneAuth().catch(() => {});
+    const token = await createSession(user.id);
+    const headers = new Headers({
+      Location: `${url.origin}${safeNextPath(saved.next)}`,
+      'Cache-Control': 'no-store',
+    });
+    headers.append('Set-Cookie', sessionCookie(token, secure));
+    headers.append('Set-Cookie', clear);
+    return new Response(null, { status: 303, headers });
   } catch (e) {
-    return failure(e);
+    // A failed sign-in should land on the sign-in page, not on raw JSON.
+    const url = new URL(request.url);
+    const message = e instanceof HttpError ? e.message : 'Google sign-in failed. Try again.';
+    return new Response(null, {
+      status: 303,
+      headers: {
+        Location: `${url.origin}/login?error=${encodeURIComponent(message.slice(0, 160))}`,
+        'Cache-Control': 'no-store',
+      },
+    });
   }
 }

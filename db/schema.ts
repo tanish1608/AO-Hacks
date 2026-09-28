@@ -13,11 +13,19 @@ export const users = sqliteTable(
     email: text('email').notNull(),
     name: text('name').notNull(),
     // pbkdf2$<iterations>$<salt>$<hash>, all base64. Never a bare digest.
+    // Holds the literal 'none' for an account that signs in with Google only:
+    // verifyPassword rejects any value whose scheme is not pbkdf2, so a
+    // password can never be guessed into one of those accounts.
     passwordHash: text('password_hash').notNull(),
+    // Google's stable subject claim. Null until an account links Google.
+    googleSub: text('google_sub'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
-  (t) => [uniqueIndex('idx_users_email').on(t.email)],
+  (t) => [
+    uniqueIndex('idx_users_email').on(t.email),
+    uniqueIndex('idx_users_google_sub').on(t.googleSub),
+  ],
 );
 export const sessions = sqliteTable(
   'sessions',

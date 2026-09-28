@@ -4556,3 +4556,10 @@ body:has(.public-workflow) { background: #fafbfc; }
 .auth-card input::placeholder { color:#98a2b3; }
 .auth-card input:focus-visible { outline:2px solid #2d3f79; outline-offset:-1px; border-color:#2d3f79; }
 .auth-card input:-webkit-autofill { -webkit-text-fill-color:#101828; box-shadow:0 0 0 1000px #fff inset; }
+.auth-google { display:flex; align-items:center; justify-content:center; gap:10px; width:100%;
+  height:40px; border:1px solid #d5d9e0; border-radius:8px; background:#fff; color:#101828;
+  font-size:14px; font-weight:500; }
+.auth-google:hover { background:#f8f9fb; }
+.auth-google:focus-visible { outline:2px solid #2d3f79; outline-offset:2px; }
+.auth-divider { display:flex; align-items:center; gap:12px; color:#98a2b3; font-size:12px; }
+.auth-divider::before, .auth-divider::after { content:''; flex:1; height:1px; background:#e5e7eb; }

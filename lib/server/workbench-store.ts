@@ -1,5 +1,6 @@
 import type { Chat, Run, RunMetric } from '../workbench/types';
 import { runMetrics } from '../workbench/metrics';
+import { trimRunDetail } from '../workbench/run-detail';
 import { needsZohoDraftDelivery } from '../workbench/zoho-tools';
 import { listKnowledge } from './tool-knowledge-store';
 import { database } from './store';
@@ -242,5 +243,12 @@ export async function snapshot(chat: Chat, owner: string, loaded?: Run[]) {
     const current = runMetrics(run);
     return { ...metric, score: current.score, passed: current.passed };
   });
-  return { chat: publicChat(chat), runs, metrics: correctedMetrics, knowledge };
+  // Trimmed only after the metrics above, which read tool traces to decide
+  // whether a delivery was actually verified.
+  return {
+    chat: publicChat(chat),
+    runs: trimRunDetail(runs),
+    metrics: correctedMetrics,
+    knowledge,
+  };
 }

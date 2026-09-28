@@ -112,7 +112,12 @@ export default function RunConversation({
               {message.content}
             </ReactMarkdown>
           </div>
-          {attempt && (
+          {attempt && run?.tracesOmitted && (
+            <p className="quiet-text">
+              Open the run details to load this step log.
+            </p>
+          )}
+          {attempt && !run?.tracesOmitted && (
             <details className="inline-log">
               <summary>
                 Inspect step log (

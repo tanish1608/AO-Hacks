@@ -400,6 +400,31 @@ export default function ChatWorkspace({
   useEffect(() => {
     scrollEnd.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chat?.messages.length, busy, pendingMessage]);
+  /** Older runs arrive without traces to keep the polled response bounded.
+   *  Fetch one in full when the user actually opens it. */
+  const hydrateRun = useCallback(async (chatId: string, runId: string) => {
+    try {
+      const { run } = await api<{ run: Run }>(
+        `/api/chats/${chatId}?run=${encodeURIComponent(runId)}`,
+      );
+      if (!mounted.current) return;
+      setSnapshot((current) =>
+        current && current.chat.id === chatId
+          ? {
+              ...current,
+              runs: current.runs.map((r) => (r.id === run.id ? run : r)),
+            }
+          : current,
+      );
+    } catch {
+      /* The dialog still opens; it simply shows no step log. */
+    }
+  }, []);
+  const openResults = (runId: string) => {
+    setResultsId(runId);
+    const target = snapshot?.runs.find((r) => r.id === runId);
+    if (chat && target?.tracesOmitted) void hydrateRun(chat.id, runId);
+  };
   const accept = (data: Snapshot) => {
     if (selectedId.current === data.chat.id) {
       setSnapshot(data);
@@ -875,7 +900,7 @@ export default function ChatWorkspace({
                   {chat.messages.map((m) =>
                     m.kind ? (
                       <RunConversation
-                        onDetails={() => setResultsId(m.runId ?? '')}
+                        onDetails={() => openResults(m.runId ?? '')}
                         key={m.id}
                         message={m}
                         run={snapshot.runs.find((r) => r.id === m.runId)}
@@ -1012,7 +1037,7 @@ export default function ChatWorkspace({
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => setResultsId(testRun.id)}
+                        onClick={() => openResults(testRun.id)}
                       >
                         View test results
                         <ArrowUpRight size={12} />
@@ -1731,6 +1756,10 @@ export default function ChatWorkspace({
           key={resultsId}
           initialId={resultsId}
           runs={testRuns}
+          onSelect={(runId) => {
+            const target = testRuns.find((r) => r.id === runId);
+            if (chat && target?.tracesOmitted) void hydrateRun(chat.id, runId);
+          }}
           onClose={() => setResultsId('')}
         />
       )}

@@ -43,6 +43,13 @@
       "when": 1790607761144,
       "tag": "0005_freezing_master_chief",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790608926949,
+      "tag": "0006_salty_plazm",
+      "breakpoints": true
     }
   ]
 }

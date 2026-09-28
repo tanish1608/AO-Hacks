@@ -50,6 +50,35 @@ account and their own connected apps.
 `npm run serve` on a laptop does not serve a workspace to the local network. The
 container image sets `HOST=0.0.0.0`.
 
+### Google sign-in
+
+Optional, and hidden entirely when unconfigured. It uses the authorization-code
+flow on a single path: `GET /api/auth/google` starts it, and Google returns to
+the same path with `?code=`, which keeps the redirect URI one segment.
+
+The ID token is read without re-verifying its signature, which is safe **only**
+because it arrives directly from Google's token endpoint over TLS. Everything a
+caller could influence is still checked in `verifyIdTokenClaims`: issuer,
+audience, expiry, and the nonce carried in a short-lived `HttpOnly` state cookie.
+`email_verified` must be true before an address is allowed to match an existing
+account, or someone could claim an address they do not control.
+
+The OAuth client cannot be created from the CLI — the IAP OAuth Admin API was
+shut down in March 2026 and generic clients are Console-only:
+
+1. APIs & Services → Credentials → Create credentials → OAuth client ID → Web application.
+2. Authorized redirect URIs: `https://<service-url>/api/auth/google` and
+   `http://127.0.0.1:3000/api/auth/google` for local development.
+3. Store the secret, then point the service at it:
+
+```sh
+printf %s "<client-secret>" | gcloud secrets create GOOGLE_CLIENT_SECRET \
+  --project=ao-hacks --data-file=-
+gcloud run services update agent-foundry --project=ao-hacks --region=us-central1 \
+  --update-env-vars="GOOGLE_CLIENT_ID=<client-id>" \
+  --update-secrets="GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest"
+```
+
 ## Data durability, and its limit
 
 SQLite lives on the instance filesystem, which does not survive a restart, so

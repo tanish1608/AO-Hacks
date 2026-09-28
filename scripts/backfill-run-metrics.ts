@@ -10,7 +10,7 @@
  *
  *   node --experimental-strip-types scripts/backfill-run-metrics.ts <database> [--apply]
  */
-import Database from 'better-sqlite3';
+import { SqliteD1 } from '../server/d1-sqlite.mjs';
 import { runMetrics } from '../lib/workbench/metrics.ts';
 import type { Run } from '../lib/workbench/types.ts';
 
@@ -20,7 +20,7 @@ const apply = process.argv.includes('--apply');
 if (!file)
   throw new Error('usage: backfill-run-metrics.ts <database> [--apply]');
 
-const db = new Database(file, { readonly: !apply });
+const db = new SqliteD1(file).db;
 const rows = db
   .prepare('SELECT id,owner_id,payload FROM agent_runs')
   .all() as { id: string; owner_id: string; payload: string }[];

@@ -136,3 +136,12 @@ python3 scripts/claim-workspace.py --database .data/foundry.sqlite \
 Run it against a downloaded copy of the database, then publish that copy under a
 new object key, as above. The script refuses to run if the target owner already
 has rows in a table keyed by owner.
+
+`agent_run_metrics` is written by `saveChat`, so runs that arrived any other way
+— a seeded demo workspace, an imported database — have no row and leave the
+Learning tab empty. Rebuild them with the same function the server uses:
+
+```sh
+node --experimental-strip-types scripts/backfill-run-metrics.ts \
+  .data/foundry.sqlite --apply
+```

@@ -15,11 +15,10 @@ TABLES = [
     ("chats", "id"),
     ("agent_runs", "id"),
     ("agent_run_metrics", "run_id"),
-    ("experiments", "id"),
-    ("releases", "id"),
     ("tool_knowledge", "id"),
     ("tool_receipts", "id"),
     ("tool_schema_cache", "id"),
+    ("workflow_publications", "id"),
     ("integration_sessions", "owner_id"),
 ]
 
